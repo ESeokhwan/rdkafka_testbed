@@ -554,5 +554,9 @@ FodyWeavers.xsd
 
 # End of https://www.toptal.com/developers/gitignore/api/c,c++,linux,macos,visualstudio,visualstudiocode,windows
 
- logs/
- config/
+logs/
+config/*
+!config/example.config
+
+libmoniq/
+librdkafka/
