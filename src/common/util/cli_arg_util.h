@@ -47,8 +47,8 @@ public:
         return {name, has_arg, flag, val};
     }
 
-    constexpr const bool has_short_option() const {
-        return val >= 0 && val < 256;
+    constexpr bool has_short_option() const {
+        return (val >= 0 && val < 256);
     }
 
     constexpr const char* get_name() const {

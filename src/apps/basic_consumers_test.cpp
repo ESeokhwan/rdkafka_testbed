@@ -1,4 +1,5 @@
 #include "util/cli_arg_util.h"
+#include "util/time_util.h"
 #include "consumer/consumer_util.h"
 #include "monitor/stat_sum_monitor_log.h"
 #include "monitor/stat_sum_monitor_log_write_strategy.h"
@@ -155,10 +156,10 @@ int main(int argc, char *argv[]) {
     ofstream per_sec_out(per_sec_filename);
     ostream &statistics_out = cout;
     vector<monitor::ServiceInfo> services = {
-        {"S10Hz-Info", 100, latency_out, per_sec_out, statistics_out},
-        {"S10Hz-Sensor", 100, latency_out, per_sec_out, statistics_out},
-        {"S30Hz", 25, latency_out, per_sec_out, statistics_out},
-        {"S50Hz", 20, latency_out, per_sec_out, statistics_out},
+        {"S10Hz-Info", 100, &latency_out, &per_sec_out, &statistics_out},
+        {"S10Hz-Sensor", 100, &latency_out, &per_sec_out, &statistics_out},
+        {"S30Hz", 25, &latency_out, &per_sec_out, &statistics_out},
+        {"S50Hz", 20, &latency_out, &per_sec_out, &statistics_out},
     };
 
 

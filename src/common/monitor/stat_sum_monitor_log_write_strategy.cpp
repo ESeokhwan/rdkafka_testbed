@@ -1,5 +1,3 @@
-#pragma once
-
 #include "monitor/stat_sum_monitor_log_write_strategy.h"
 #include "monitor/stat_sum_monitor_log.h"
 
@@ -12,6 +10,8 @@ using namespace moniq;
 namespace common {
 namespace monitor {
 
+std::ostream& print_latency_log(std::ostream &ostream, const ProcessedLog &log);
+std::ostream& print_stat_log(std::ostream &ostream, const Statistics &log);
 Statistics calc_statistics(const std::vector<ProcessedLog> &logs, double threshold);
 double calc_reliability(const std::vector<ProcessedLog> &logs, double threshold);
 double calc_avg_latency(const std::vector<ProcessedLog> &logs);
@@ -46,27 +46,28 @@ bool StatSumPerSecMonitorLogWriteStrategy::commit() {
         ServiceInfo service = services_[service_name];
         Statistics stat = calc_statistics(processed_logs, service.threshold);
 
-        service.latency_ostream << "Content,Status,RequestedAt,respondedAt,Latency\n";
+        *service.latency_ostream << "Content,Status,RequestedAt,respondedAt,Latency\n";
         for (const auto& log: processed_logs) {
-            print_latency_log(service.latency_ostream, log);
+            print_latency_log(*service.latency_ostream, log);
         }
 
-        service.statistic_ostream << "[" << service_name << "] "
-            << "Total=" << processed_logs.size()
+        *service.statistic_ostream << "[" << service_name << "] "
+            << "Total=" << stat.record_cnt
             << " AvgGap=" << std::fixed << std::setprecision(2) << stat.avg_latency << "ms"
             << " P90=" << stat.p90_latency << "ms"
             << " P99=" << stat.p99_latency << "ms"
             << " Reliability=" << std::fixed << std::setprecision(2) << stat.reliability << "%"
             << std::endl;
 
-        service.per_sec_ostream << "SecondEpoch,Total,Rel(%),AvgLatency,P90Latency,P99Latency\n";
+        *service.per_sec_ostream << "SecondEpoch,Total,Rel(%),AvgLatency,P90Latency,P99Latency\n";
         std::map<int64_t, std::vector<ProcessedLog>> logs_map_by_sec = devide_logs_by_epoch_sec(processed_logs);
         for (const auto& [sec_epoch, logs]: logs_map_by_sec) {
             Statistics stat = calc_statistics(logs, service.threshold);
-            service.per_sec_ostream << sec_epoch << ",";
-            print_stat_log(service.per_sec_ostream, stat);
+            *service.per_sec_ostream << sec_epoch << ",";
+            print_stat_log(*service.per_sec_ostream, stat);
         }
     }
+    return true;
 }
 
 std::ostream& print_latency_log(std::ostream &ostream, const ProcessedLog &log) {
@@ -75,7 +76,7 @@ std::ostream& print_latency_log(std::ostream &ostream, const ProcessedLog &log) 
 }
 
 std::ostream& print_stat_log(std::ostream &ostream, const Statistics &log) {
-    return ostream << log.reliability << "," << log.avg_latency 
+    return ostream << log.record_cnt<< log.reliability << "," << log.avg_latency 
         << "," << log.p90_latency << "," << log.p99_latency << "\n";
 }
 
@@ -87,7 +88,7 @@ Statistics calc_statistics(const std::vector<ProcessedLog> &logs, double thresho
     std::vector<double> sorted_latencies = make_sorted_latencies(logs);
     double p90 = calc_latency_percentile(sorted_latencies, 0.90);
     double p99 = calc_latency_percentile(sorted_latencies, 0.99);
-    return {reliability, avg_latency, p90, p99};
+    return {logs.size(), reliability, avg_latency, p90, p99};
 }
 
 double calc_reliability(const std::vector<ProcessedLog> &logs, double threshold) {

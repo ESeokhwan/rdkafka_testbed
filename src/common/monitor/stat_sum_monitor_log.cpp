@@ -1,5 +1,3 @@
-#pragma once
-
 #include "monitor/stat_sum_monitor_log.h"
 
 #include <libmoniq/adaptor/latency_monitoring_message_adaptor.h>
