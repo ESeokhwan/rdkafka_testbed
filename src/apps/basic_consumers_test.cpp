@@ -1,7 +1,7 @@
-#include "common/util/cli_arg_util.h"
-#include "common/consumer/consumer_util.h"
-#include "common/monitor/stat_sum_monitor_log.h"
-#include "common/monitor/stat_sum_monitor_log_write_strategy.h"
+#include "util/cli_arg_util.h"
+#include "consumer/consumer_util.h"
+#include "monitor/stat_sum_monitor_log.h"
+#include "monitor/stat_sum_monitor_log_write_strategy.h"
 
 #include <atomic>
 #include <csignal>

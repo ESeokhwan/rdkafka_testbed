@@ -1,7 +1,7 @@
 #pragma once
 
-#include "common/monitor/stat_sum_monitor_log_write_strategy.h"
-#include "common/monitor/stat_sum_monitor_log.h"
+#include "monitor/stat_sum_monitor_log_write_strategy.h"
+#include "monitor/stat_sum_monitor_log.h"
 
 #include <algorithm>
 #include <iostream>

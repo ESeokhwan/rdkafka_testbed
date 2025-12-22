@@ -1,4 +1,4 @@
-#include "common/consumer/consumer_util.h"
+#include "consumer/consumer_util.h"
 
 #include <iostream>
 
