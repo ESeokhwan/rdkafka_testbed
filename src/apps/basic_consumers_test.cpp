@@ -163,16 +163,18 @@ int main(int argc, char *argv[]) {
         {"S50Hz", 20},
     };
 
-    vector<ostream> latency_outs;
-    vector<ostream> per_sec_outs;
+    vector<unique_ptr<ostream>> latency_outs;
+    vector<unique_ptr<ostream>> per_sec_outs;
     vector<monitor::ServiceInfo> services;
-    for (int i = 0; i < service_args.size(); i++) {
-        latency_outs.push_back(ofstream(service_args[i].name + "_" + latency_file_postfix));
-        per_sec_outs.push_back(ofstream(service_args[i].name + "_" + per_sec_file_postfix));
+    for (size_t i = 0; i < service_args.size(); i++) {
+        unique_ptr<ostream> latecny_out = make_unique<ofstream>(service_args[i].name + "_" + latency_file_postfix);
+        unique_ptr<ostream> per_sec_out = make_unique<ofstream>(service_args[i].name + "_" + per_sec_file_postfix);
         services.push_back({
             service_args[i].name, service_args[i].threshold,
-            &latency_outs[i], &per_sec_outs[i], &cout
+            latecny_out.get(), per_sec_out.get(), &cout
         });
+        latency_outs.push_back(move(latecny_out));
+        per_sec_outs.push_back(move(per_sec_out));
     }
 
     moniq::MonitorQueue monitor_queue;
