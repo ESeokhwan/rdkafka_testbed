@@ -46,6 +46,11 @@ struct ConsumerThreadArg {
     bool verbose;
 };
 
+struct ServiceArg {
+    string name;
+    double threshold;
+};
+
 vector<int> assign_services(int num_cars, int num_services);
 
 // Global variables
@@ -149,19 +154,26 @@ int main(int argc, char *argv[]) {
         << "Verbose: " << (args.verbose ? "on" : "off") << "\n"
         << "Start time: " << util::current_time_str() << endl;
 
-    std::string latency_filename = "latency.csv";
-    std::string per_sec_filename = "per_sec.csv";
-
-    ofstream latency_out(latency_filename);
-    ofstream per_sec_out(per_sec_filename);
-    ostream &statistics_out = cout;
-    vector<monitor::ServiceInfo> services = {
-        {"S10Hz-Info", 100, &latency_out, &per_sec_out, &statistics_out},
-        {"S10Hz-Sensor", 100, &latency_out, &per_sec_out, &statistics_out},
-        {"S30Hz", 25, &latency_out, &per_sec_out, &statistics_out},
-        {"S50Hz", 20, &latency_out, &per_sec_out, &statistics_out},
+    std::string latency_file_postfix = "latency.csv";
+    std::string per_sec_file_postfix = "per_sec.csv";
+    vector<struct ServiceArg> service_args = {
+        {"S10Hz-Info", 100},
+        {"S10Hz-Sensor", 100},
+        {"S30Hz", 25},
+        {"S50Hz", 20},
     };
 
+    vector<ostream> latency_outs;
+    vector<ostream> per_sec_outs;
+    vector<monitor::ServiceInfo> services;
+    for (int i = 0; i < service_args.size(); i++) {
+        latency_outs.push_back(ofstream(service_args[i].name + "_" + latency_file_postfix));
+        per_sec_outs.push_back(ofstream(service_args[i].name + "_" + per_sec_file_postfix));
+        services.push_back({
+            service_args[i].name, service_args[i].threshold,
+            &latency_outs[i], &per_sec_outs[i], &cout
+        });
+    }
 
     moniq::MonitorQueue monitor_queue;
     monitor::StatSumPerSecMonitorLogWriteStrategy write_strategy(services);
