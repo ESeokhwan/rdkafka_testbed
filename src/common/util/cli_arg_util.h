@@ -80,6 +80,7 @@ constexpr OptionWrapper ROUND_CNT_OPTION = {"round_cnt", required_argument, null
 constexpr OptionWrapper INTERVAL_OPTION = {"interval", required_argument, nullptr, 'i', "Produce interval (ms)"};
 constexpr OptionWrapper MSG_SIZE_OPTION = {"msg_size", required_argument, nullptr, 'm', "Message size in bytes"};
 constexpr OptionWrapper RUNNING_TIME_OPTION = {"running_time", required_argument, nullptr, 'r', "Running time (ms)"};
+constexpr OptionWrapper OUTDIR_OPTION = {"outdir", required_argument, nullptr, 'o', "Output directory"};
 
 constexpr OptionWrapper CLIENT_CNT_OPTION = {"client_cnt", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::CLIENT_CNT), "Number of clients"};
 constexpr OptionWrapper SERVICE_CNT_OPTION = {"service_cnt", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::SERVICE_CNT), "Number of services"};
