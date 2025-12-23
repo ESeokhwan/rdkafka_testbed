@@ -30,6 +30,8 @@ struct Arguments {
     bool scrapable;
     bool read_tagged_only;
     bool verbose;
+
+    string outdir;
 };
 
 struct ConsumerThreadArg {
@@ -79,6 +81,7 @@ void parse_arguments(int argc, char** argv, Arguments& args) {
         util::RUNNING_TIME_OPTION,
         util::SCRAPABLE_OPTION,
         util::READ_TAGGED_ONLY_OPTION,
+        util::OUTDIR_OPTION,
         util::VERBOSE_OPTION,
     };
 
@@ -93,6 +96,7 @@ void parse_arguments(int argc, char** argv, Arguments& args) {
             case util::RUNNING_TIME_OPTION.get_val(): args.running_time = atoi(optarg); break;
             case util::SCRAPABLE_OPTION.get_val(): args.scrapable = true; break;
             case util::READ_TAGGED_ONLY_OPTION.get_val(): args.read_tagged_only = true; break;
+            case util::OUTDIR_OPTION.get_val(): args.outdir = optarg; break;
             case util::VERBOSE_OPTION.get_val(): args.verbose = true; break;
             default:
                 cerr << "Error: Unknown option or missing argument." << endl << endl;
@@ -151,6 +155,7 @@ int main(int argc, char *argv[]) {
         << "Running Time: " << args.running_time << "\n"
         << "Scrapable: " << (args.scrapable ? "on" : "off") << "\n"
         << "Log Sampling: " << (args.read_tagged_only ? "on" : "off") << "\n"
+        << "Output Directory: " << args.outdir << "\n"
         << "Verbose: " << (args.verbose ? "on" : "off") << "\n"
         << "Start time: " << util::current_time_str() << endl;
 
@@ -167,8 +172,10 @@ int main(int argc, char *argv[]) {
     vector<unique_ptr<ostream>> per_sec_outs;
     vector<monitor::ServiceInfo> services;
     for (size_t i = 0; i < service_args.size(); i++) {
-        unique_ptr<ostream> latecny_out = make_unique<ofstream>(service_args[i].name + "_" + latency_file_postfix);
-        unique_ptr<ostream> per_sec_out = make_unique<ofstream>(service_args[i].name + "_" + per_sec_file_postfix);
+        unique_ptr<ostream> latecny_out = make_unique<ofstream>(
+            args.outdir + "/" + service_args[i].name + "_" + latency_file_postfix);
+        unique_ptr<ostream> per_sec_out = make_unique<ofstream>(
+            args.outdir + "/" + service_args[i].name + "_" + per_sec_file_postfix);
         services.push_back({
             service_args[i].name, service_args[i].threshold,
             latecny_out.get(), per_sec_out.get(), &cout
