@@ -22,7 +22,7 @@ public:
     AbstractApplication(moniq::MonitorQueue *mq, moniq::writer::MonitorLogWriter *mw);
     // TODO
     // AbstractApplication(int init_monitoring_batch_size);
-    virtual ~AbstractApplication();
+    virtual ~AbstractApplication() =default;
 
     virtual void run() = 0;
     void cleanup() {

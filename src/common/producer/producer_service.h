@@ -70,9 +70,7 @@ public:
         moniq::writer::MonitorLogWriter* writer
     );
 
-    ~ProducerService() {
-        close();
-    }
+    virtual ~ProducerService() = default;
 
     bool is_done() override;
 

@@ -110,7 +110,9 @@ void ProducerService::work() {
 
 void ProducerService::close() {
     if (producer != nullptr && need_to_cleanup_producer) {
+        flush_producer(producer);
         delete producer;
+        producer = nullptr;
     }
 }
 

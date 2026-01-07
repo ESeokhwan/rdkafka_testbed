@@ -20,12 +20,8 @@ AbstractApplication(
 }
 */
 
-AbstractApplication::~AbstractApplication() {
-    cleanup();
-}
-
 void AbstractApplication::start_barrier(int delay) {
-    std::cout << "En Garde...";
+    std::cout << "En Garde...\n";
     std::this_thread::sleep_for(std::chrono::milliseconds(delay));
     std::cout << "Allez!\n";
     start_signal.count_down();
@@ -33,7 +29,7 @@ void AbstractApplication::start_barrier(int delay) {
 
 void AbstractApplication::cleanup_monitor() {
     writer->graceful_shutdown();
-    writer_thread->join();
+    if (writer_thread && writer_thread->joinable()) writer_thread->join();
     if (need_to_remove_monitor_instances) {
         delete monitor_queue;
         delete writer;

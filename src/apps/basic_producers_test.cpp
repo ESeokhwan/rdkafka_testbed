@@ -63,10 +63,10 @@ protected:
 private:
     Arguments args;
 
+    unique_ptr<RdKafka::DeliveryReportCb> dr_cb;
     vector<unique_ptr<ServicesRunner>> services_runners;
     vector<thread> client_threads;
     vector<RdKafka::Producer *> shared_producers;
-    unique_ptr<RdKafka::DeliveryReportCb> dr_cb;
 
     moniq::adaptor::IMessageAdaptor *adaptor;
     random_device rd;
@@ -85,6 +85,8 @@ public:
     ): AbstractApplication(monitor_queue, writer), args(args), adaptor(adaptor) {
 
     }
+
+    virtual ~BasicProducersTest() = default;
 
     void run() override;
 };
@@ -108,6 +110,24 @@ int main(int argc, char *argv[]) {
         << "Broker: " << args.broker << "\n"
         << "Prefix: " << args.prefix << "\n"
         << "Client Count: " << args.client_cnt << "\n"
+        << "Topic Count per Client: " << args.topic_cnt_per_client << "\n"
+        << "Message Count per Topic: " << args.msg_cnt_per_topic << "\n"
+        << "Interval: " << args.interval << "\n"
+        << "Interval Noise Stddev: " << args.interval_noise_stddev << "\n"
+        << "Interval Between Topics: " << args.interval_btw_topic << "\n"
+        << "Interval Between Topics Noise Stddev: " << args.interval_btw_topic_noise_stddev << "\n"
+        << "Message Size: " << args.msg_size << "\n"
+        << "Is Sync: " << (args.is_sync ? "on" : "off") << "\n"
+        << "Ignore Response: " << (args.ignore_response ? "on" : "off") << "\n"
+        << "Need Flush: " << (args.need_flush ? "on" : "off") << "\n"
+        << "Sample Log: " << (args.sample_log ? "on" : "off") << "\n"
+        << "Tag Record: " << (args.tag_log ? "on" : "off") << "\n"
+        << "Share Producer: " << (args.share_producer ? "on" : "off") << "\n"
+        << "Warmup Count: " << args.warmup_cnt << "\n"
+        << "Warmup Topic: " << args.warmup_topic << "\n"
+        << "Start Barrier Delay: " << args.start_barrier_delay << "\n"
+        << "Monitoring Batch Size: " << args.monitoring_batch_size << "\n"
+        << "Service Runner Pool Size: " << args.service_runner_pool_size << "\n"
         << "Scrapable: " << (args.scrapable ? "on" : "off") << "\n"
         << "Output Directory: " << args.outdir << "\n"
         << "Verbose: " << (args.verbose ? "on" : "off") << "\n"
@@ -120,6 +140,7 @@ int main(int argc, char *argv[]) {
     app = new BasicProducersTest(&monitor_queue, &writer, &adaptor, args);
     signal(SIGINT, interrupt_handler);
     app->run();
+    app->cleanup();
 
     delete app;
     return 0;
@@ -201,7 +222,7 @@ void BasicProducersTest::init_sharing_prod_services() {
         services_runners.push_back(make_unique<ServicesRunner>(
             services, warmup_service, args.interval_btw_topic, 
             args.interval_btw_topic_noise_stddev, args.interval_btw_topic / 2,
-            rng, start_signal, args.service_runner_pool_size
+            rng, &start_signal, args.service_runner_pool_size
         ));
     }
 }
@@ -253,16 +274,19 @@ void BasicProducersTest::init_standalone_services() {
         services_runners.push_back(make_unique<ServicesRunner>(
             services, warmup_service, args.interval_btw_topic, 
             args.interval_btw_topic_noise_stddev, args.interval_btw_topic / 2,
-            rng, start_signal, args.service_runner_pool_size
+            rng, &start_signal, args.service_runner_pool_size
         ));
     }
 }
 
 void BasicProducersTest::join_clients() {
     for (auto &client_thread: client_threads) {
-        client_thread.join();
+        if (client_thread.joinable()) client_thread.join();
     }
-    for (auto *producer: shared_producers) delete producer;
+    for (auto *producer: shared_producers) {
+        producer->flush(5000);
+        delete producer;
+    }
     shared_producers.clear();
 }
 

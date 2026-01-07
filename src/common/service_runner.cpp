@@ -6,7 +6,7 @@ ServicesRunner::ServicesRunner(
     std::vector<std::shared_ptr<IService>> svcs, 
     std::shared_ptr<IService> warmup_svc,
     int inter, double stddev, int max_noise, 
-    std::mt19937& rng, std::latch& start_sig, int pool_size
+    std::mt19937& rng, std::latch *start_sig, int pool_size
 ): services(svcs), warmup_service(warmup_svc), interval(inter),
    start_signal(start_sig), scheduler_timer(io_context),
    pool(pool_size),
@@ -29,7 +29,7 @@ ServicesRunner::ServicesRunner(
 void ServicesRunner::run() {
     warmup();
 
-    start_signal.wait();
+    start_signal->wait();
     if (completion_signal->try_wait()) return;
 
     init_first_schedules();

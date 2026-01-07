@@ -26,7 +26,7 @@ private:
     int interval;
     util::Noises noises;
 
-    std::latch& start_signal;
+    std::latch *start_signal;
     std::unique_ptr<std::latch> completion_signal;
 
     boost::asio::io_context io_context;
@@ -49,7 +49,8 @@ public:
     ServicesRunner(std::vector<std::shared_ptr<IService>> svcs, 
                    std::shared_ptr<IService> warmup_svc,
                    int inter, double stddev, int max_noise, 
-                   std::mt19937& rng, std::latch& start_sig, int pool_size);
+                   std::mt19937& rng, std::latch *start_sig, int pool_size);
+    virtual ~ServicesRunner() = default;
 
     void run();
     void close();
