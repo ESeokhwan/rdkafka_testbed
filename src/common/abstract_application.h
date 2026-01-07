@@ -10,18 +10,16 @@
 
 class AbstractApplication {
 protected:
-    moniq::MonitorQueue *monitor_queue;
-    moniq::writer::MonitorLogWriter *writer;
+    std::shared_ptr<moniq::MonitorQueue> monitor_queue;
+    std::shared_ptr<moniq::writer::MonitorLogWriter> writer;
     std::unique_ptr<std::thread> writer_thread;
     std::latch start_signal;
 
-private:
-    const bool need_to_remove_monitor_instances;
-
 public:
-    AbstractApplication(moniq::MonitorQueue *mq, moniq::writer::MonitorLogWriter *mw);
-    // TODO
-    // AbstractApplication(int init_monitoring_batch_size);
+    AbstractApplication(
+        std::shared_ptr<moniq::MonitorQueue> &monitor_queue,
+        std::shared_ptr<moniq::writer::MonitorLogWriter> &writer);
+    AbstractApplication(bool scrapable, int monitoring_batch_size, int monitoring_timeout);
     virtual ~AbstractApplication() =default;
 
     virtual void run() = 0;

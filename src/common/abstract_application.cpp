@@ -1,24 +1,30 @@
 #include "abstract_application.h"
 
+#include <libmoniq/writer/write_strategy/console_monitor_log_write_strategy.h>
+
 #include <iostream>
+#include <memory>
 
 AbstractApplication::AbstractApplication(
-    moniq::MonitorQueue *monitor_queue,
-    moniq::writer::MonitorLogWriter *writer
-): monitor_queue(monitor_queue), writer(writer),
-    start_signal(1), need_to_remove_monitor_instances(false) {
+    std::shared_ptr<moniq::MonitorQueue> &monitor_queue,
+    std::shared_ptr<moniq::writer::MonitorLogWriter> &writer
+): monitor_queue(monitor_queue), writer(writer), start_signal(1) {
     this->writer_thread = std::make_unique<std::thread>(&moniq::writer::MonitorLogWriter::run, writer);
 }
 
-/* TODO
-AbstractApplication(
-    int init_monitoring_batch_size
-): start_signal(1), need_to_remove_monitor_instances(true) {
-    this->monitor_queue = new moniq::MonitorQueue();
-    this->writer = new moniq::writer::MonitorLogWriter()
+AbstractApplication::AbstractApplication(
+    bool scrapable, int monitoring_batch_size, int monitoring_timeout
+): start_signal(1) {
+    this->monitor_queue = std::make_shared<moniq::MonitorQueue>();
+    this->writer = std::make_shared<moniq::writer::MonitorLogWriter>(
+        monitor_queue,
+        std::make_shared<moniq::writer::ConsoleMonitorLogWriteStrategy>(scrapable),
+        monitoring_batch_size,
+        monitoring_timeout
+    );
     this->writer_thread = std::make_unique<std::thread>(&moniq::writer::MonitorLogWriter::run, writer);
 }
-*/
+
 
 void AbstractApplication::start_barrier(int delay) {
     std::cout << "En Garde...\n";
@@ -30,8 +36,4 @@ void AbstractApplication::start_barrier(int delay) {
 void AbstractApplication::cleanup_monitor() {
     writer->graceful_shutdown();
     if (writer_thread && writer_thread->joinable()) writer_thread->join();
-    if (need_to_remove_monitor_instances) {
-        delete monitor_queue;
-        delete writer;
-    }
 }

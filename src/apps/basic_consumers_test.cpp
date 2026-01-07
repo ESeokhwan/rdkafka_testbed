@@ -1,3 +1,4 @@
+#include "libmoniq/writer/write_strategy/monitor_log_write_strategy.h"
 #include "util/cli_arg_util.h"
 #include "util/time_util.h"
 #include "consumer/consumer_util.h"
@@ -9,6 +10,7 @@
 #include <condition_variable>
 #include <iostream>
 #include <fstream>
+#include <memory>
 #include <mutex>
 #include <getopt.h>
 #include <thread>
@@ -41,8 +43,8 @@ struct ConsumerThreadArg {
 
     vector<string> topics;
 
-    moniq::MonitorQueue* monitor_queue;
-    moniq::writer::MonitorLogWriter* writer;
+    shared_ptr<moniq::MonitorQueue> monitor_queue;
+    shared_ptr<moniq::writer::MonitorLogWriter> writer;
 
     bool read_tagged_only;
     bool verbose;
@@ -107,9 +109,6 @@ void parse_arguments(int argc, char** argv, Arguments& args) {
 }
 
 void consume_run(struct ConsumerThreadArg *arg) {
-    moniq::MonitorQueue* monitor_queue = arg->monitor_queue;
-    moniq::writer::MonitorLogWriter* monitor_writer = arg->writer;
-
     string errstr;
     unique_ptr<RdKafka::Conf> conf(RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL));
     conf->set("bootstrap.servers", arg->broker, errstr);
@@ -134,12 +133,12 @@ void consume_run(struct ConsumerThreadArg *arg) {
     while (!end_flag.load(memory_order_acquire)) {
         optional<string> plain_msg_opt = consumer::consume_message(consumer.get(), 1);
         if (!plain_msg_opt.has_value()) continue;
-        monitor_queue->enqueue(
+        arg->monitor_queue->enqueue(
             make_unique<monitor::StatSumMonitorLog>(
                 plain_msg_opt.value(), "Responded", util::get_current_timestamp()
             )
         );
-        monitor_writer->notify_if_needed();
+        arg->writer->notify_if_needed();
     }
 }
 
@@ -180,15 +179,15 @@ int main(int argc, char *argv[]) {
             service_args[i].name, service_args[i].threshold,
             latecny_out.get(), per_sec_out.get(), &cout
         });
-        latency_outs.push_back(move(latecny_out));
-        per_sec_outs.push_back(move(per_sec_out));
+        latency_outs.push_back(std::move(latecny_out));
+        per_sec_outs.push_back(std::move(per_sec_out));
     }
 
-    moniq::MonitorQueue monitor_queue;
-    monitor::StatSumPerSecMonitorLogWriteStrategy write_strategy(services);
-    moniq::writer::MonitorLogWriter writer(monitor_queue, write_strategy, -1, -1);
+    shared_ptr<moniq::MonitorQueue> monitor_queue = make_shared<moniq::MonitorQueue>();
+    shared_ptr<moniq::writer::IMonitorLogWriteStrategy> write_strategy = make_shared<monitor::StatSumPerSecMonitorLogWriteStrategy>(services);
+    shared_ptr<moniq::writer::MonitorLogWriter> writer = make_shared<moniq::writer::MonitorLogWriter>(monitor_queue, write_strategy, -1, -1);
 
-    thread writer_thread(&moniq::writer::MonitorLogWriter::run, &writer);
+    thread writer_thread(&moniq::writer::MonitorLogWriter::run, writer);
 
     vector<struct ConsumerThreadArg> consumer_thread_args(args.client_cnt);
     vector<thread> consumer_threads;
@@ -201,8 +200,8 @@ int main(int argc, char *argv[]) {
         consumer_thread_args[i].topics.push_back(args.prefix + services[assigned_idx[i]].name);
         consumer_thread_args[i].verbose = args.verbose;
         consumer_thread_args[i].read_tagged_only = args.read_tagged_only;
-        consumer_thread_args[i].monitor_queue = &monitor_queue;
-        consumer_thread_args[i].writer = &writer;
+        consumer_thread_args[i].monitor_queue = monitor_queue;
+        consumer_thread_args[i].writer = writer;
         consumer_threads.emplace_back(consume_run, &consumer_thread_args[i]);
     }
 
@@ -222,7 +221,7 @@ int main(int argc, char *argv[]) {
     for (auto& consumer_thread: consumer_threads) {
         consumer_thread.join();
     }
-    writer.graceful_shutdown();
+    writer->graceful_shutdown();
     writer_thread.join();
 
     return 0;

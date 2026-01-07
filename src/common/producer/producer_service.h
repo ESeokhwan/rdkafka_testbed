@@ -26,9 +26,9 @@ private:
     const bool need_to_cleanup_producer;
     RdKafka::DeliveryReportCb* dr_cb; // it will be set null if `producer` is injected from outside.
 
-    moniq::adaptor::IMessageAdaptor* adaptor;
-    moniq::MonitorQueue* monitor_queue;
-    moniq::writer::MonitorLogWriter* writer;
+    std::shared_ptr<moniq::adaptor::IMessageAdaptor> adaptor;
+    std::shared_ptr<moniq::MonitorQueue> monitor_queue;
+    std::shared_ptr<moniq::writer::MonitorLogWriter> writer;
 
     std::atomic<size_t> cur_idx{0};
 
@@ -46,9 +46,9 @@ public:
         bool need_flush,
         bool log_enabled,
         bool msg_tagged,
-        moniq::adaptor::IMessageAdaptor* adaptor,
-        moniq::MonitorQueue* monitor_queue,
-        moniq::writer::MonitorLogWriter* writer
+        std::shared_ptr<moniq::adaptor::IMessageAdaptor> &adaptor,
+        std::shared_ptr<moniq::MonitorQueue> &monitor_queue,
+        std::shared_ptr<moniq::writer::MonitorLogWriter> &writer
     );
 
     ProducerService(
@@ -65,9 +65,9 @@ public:
         bool need_flush,
         bool log_enabled,
         bool msg_tagged,
-        moniq::adaptor::IMessageAdaptor* adaptor,
-        moniq::MonitorQueue* monitor_queue,
-        moniq::writer::MonitorLogWriter* writer
+        std::shared_ptr<moniq::adaptor::IMessageAdaptor> &adaptor,
+        std::shared_ptr<moniq::MonitorQueue> &monitor_queue,
+        std::shared_ptr<moniq::writer::MonitorLogWriter> &writer
     );
 
     virtual ~ProducerService() = default;
@@ -90,15 +90,15 @@ public:
 
 class LoggingDeliveryReportCb : public RdKafka::DeliveryReportCb {
 private:
-    moniq::adaptor::IMessageAdaptor* adaptor;
-    moniq::MonitorQueue* monitor_queue;
-    moniq::writer::MonitorLogWriter* writer;
+    std::shared_ptr<moniq::adaptor::IMessageAdaptor> adaptor;
+    std::shared_ptr<moniq::MonitorQueue> monitor_queue;
+    std::shared_ptr<moniq::writer::MonitorLogWriter> writer;
 
 public:
     LoggingDeliveryReportCb(
-        moniq::adaptor::IMessageAdaptor* adaptor,
-        moniq::MonitorQueue* monitor_queue,
-        moniq::writer::MonitorLogWriter* writer
+        std::shared_ptr<moniq::adaptor::IMessageAdaptor> &adaptor,
+        std::shared_ptr<moniq::MonitorQueue> &monitor_queue,
+        std::shared_ptr<moniq::writer::MonitorLogWriter> &writer
     ): adaptor(adaptor), monitor_queue(monitor_queue), writer(writer) {}
 
     void dr_cb(RdKafka::Message &message) override;

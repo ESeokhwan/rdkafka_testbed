@@ -29,9 +29,9 @@ ProducerService::ProducerService(
     bool need_flush,
     bool log_enabled,
     bool msg_tagged,
-    moniq::adaptor::IMessageAdaptor* adaptor,
-    moniq::MonitorQueue* monitor_queue,
-    moniq::writer::MonitorLogWriter* writer
+    std::shared_ptr<moniq::adaptor::IMessageAdaptor> &adaptor,
+    std::shared_ptr<moniq::MonitorQueue> &monitor_queue,
+    std::shared_ptr<moniq::writer::MonitorLogWriter> &writer
 ): AbstractService(
     round_cnt, interval, 
     util::generate_noises(
@@ -57,9 +57,9 @@ ProducerService::ProducerService(
     bool need_flush,
     bool log_enabled,
     bool msg_tagged,
-    moniq::adaptor::IMessageAdaptor* adaptor,
-    moniq::MonitorQueue* monitor_queue,
-    moniq::writer::MonitorLogWriter* writer
+    std::shared_ptr<moniq::adaptor::IMessageAdaptor> &adaptor,
+    std::shared_ptr<moniq::MonitorQueue> &monitor_queue,
+    std::shared_ptr<moniq::writer::MonitorLogWriter> &writer
 ): AbstractService(
     round_cnt, interval, 
     util::generate_noises(

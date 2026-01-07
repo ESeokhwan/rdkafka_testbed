@@ -17,6 +17,7 @@
 #include <libmoniq/monitor_queue.h>
 #include <libmoniq/writer/monitor_log_writer.h>
 #include <libmoniq/writer/write_strategy/console_monitor_log_write_strategy.h>
+#include <libmoniq/writer/write_strategy/monitor_log_write_strategy.h>
 #include <libmoniq/adaptor/latency_monitoring_message_adaptor.h>
 #include <libmoniq/adaptor/message_adaptor.h>
 
@@ -68,7 +69,7 @@ private:
     vector<thread> client_threads;
     vector<RdKafka::Producer *> shared_producers;
 
-    moniq::adaptor::IMessageAdaptor *adaptor;
+    shared_ptr<moniq::adaptor::IMessageAdaptor> adaptor;
     random_device rd;
 
     void init_services();
@@ -78,9 +79,9 @@ private:
 
 public:
     BasicProducersTest(
-        moniq::MonitorQueue *monitor_queue,
-        moniq::writer::MonitorLogWriter *writer,
-        moniq::adaptor::IMessageAdaptor *adaptor,
+        shared_ptr<moniq::MonitorQueue> &monitor_queue,
+        shared_ptr<moniq::writer::MonitorLogWriter> &writer,
+        shared_ptr<moniq::adaptor::IMessageAdaptor> &adaptor,
         Arguments args
     ): AbstractApplication(monitor_queue, writer), args(args), adaptor(adaptor) {
 
@@ -133,11 +134,15 @@ int main(int argc, char *argv[]) {
         << "Verbose: " << (args.verbose ? "on" : "off") << "\n"
         << "Start time: " << util::current_time_str() << endl;
 
-    moniq::adaptor::JsonBasedLatencyMonitoringMessageGenerator adaptor(args.msg_size, min(args.msg_size, 1000));
-    moniq::MonitorQueue monitor_queue;
-    moniq::writer::ConsoleMonitorLogWriteStrategy write_strategy(args.scrapable);
-    moniq::writer::MonitorLogWriter writer(monitor_queue, write_strategy, args.monitoring_batch_size, -1);
-    app = new BasicProducersTest(&monitor_queue, &writer, &adaptor, args);
+    shared_ptr<moniq::adaptor::IMessageAdaptor> adaptor =
+        make_shared<moniq::adaptor::JsonBasedLatencyMonitoringMessageGenerator>(args.msg_size, min(args.msg_size, 1000));
+    shared_ptr<moniq::MonitorQueue> monitor_queue = make_shared<moniq::MonitorQueue>();
+    shared_ptr<moniq::writer::IMonitorLogWriteStrategy> write_strategy =
+        make_shared<moniq::writer::ConsoleMonitorLogWriteStrategy>(args.scrapable);
+    shared_ptr<moniq::writer::MonitorLogWriter> writer =
+        make_shared<moniq::writer::MonitorLogWriter>(monitor_queue, write_strategy, args.monitoring_batch_size, -1);
+
+    app = new BasicProducersTest(monitor_queue, writer, adaptor, args);
     signal(SIGINT, interrupt_handler);
     app->run();
     app->cleanup();
