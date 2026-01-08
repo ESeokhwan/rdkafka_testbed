@@ -40,7 +40,7 @@ ProducerService::ProducerService(
     ), topic_name(topic_name), round_cnt(round_cnt),
     is_sync(is_sync), ignore_response(ignore_response), need_flush(need_flush),
     log_enabled(log_enabled), msg_tagged(msg_tagged),
-    producer(producer), need_to_cleanup_producer(true),
+    producer(producer), need_to_cleanup_producer(false),
     adaptor(adaptor), monitor_queue(monitor_queue), writer(writer) {}
 
 ProducerService::ProducerService(

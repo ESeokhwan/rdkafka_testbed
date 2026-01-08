@@ -1,13 +1,14 @@
 #pragma once
 
-#include "libmoniq/adaptor/message_adaptor.h"
 #include "service.h"
 
-#include <atomic>
-#include <cstddef>
+#include <libmoniq/adaptor/message_adaptor.h>
 #include <libmoniq/monitor_queue.h>
 #include <libmoniq/writer/monitor_log_writer.h>
 #include <librdkafka/rdkafkacpp.h>
+
+#include <atomic>
+#include <cstddef>
 
 namespace common {
 namespace producer {
