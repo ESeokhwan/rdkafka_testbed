@@ -24,6 +24,7 @@ enum class LongOnlyOptionVals {
     SAMPLE_LOG,
     TOPIC_CNT_PER_CLIENT,
     INTERVAL_NOISE_STDDEV,
+    INTERVAL_NOISE_STDDEV_RATE,
     INTERVAL_BTW_TOPIC,
     INTERVAL_BTW_TOPIC_NOISE_STDDEV,
     IGNORE_RESPONSE,
@@ -109,6 +110,7 @@ constexpr OptionWrapper TOPIC_CNT_PER_CLIENT_OPTION = {"topic_cnt_per_client", r
 
 constexpr OptionWrapper NOISE_STDDEV_OPTION = {"noise_stddev", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::NOISE_STDDEV), "Noise standard deviation"};
 constexpr OptionWrapper INTERVAL_NOISE_STDDEV_OPTION = {"interval_noise_stddev", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::INTERVAL_NOISE_STDDEV), "Interval noise standard deviation"};
+constexpr OptionWrapper INTERVAL_NOISE_STDDEV_RATE_OPTION = {"interval_noise_stddev_rate", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::INTERVAL_NOISE_STDDEV_RATE), "Interval noise standard deviation rate (0~100)"};
 constexpr OptionWrapper INTERVAL_BTW_TOPIC_OPTION = {"interval_btw_topic", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::INTERVAL_BTW_TOPIC), "Interval between topics"};
 constexpr OptionWrapper INTERVAL_BTW_TOPIC_NOISE_STDDEV_OPTION = {"interval_btw_topic_noise_stddev", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::INTERVAL_BTW_TOPIC_NOISE_STDDEV), "Interval between topics noise standard deviation"};
 
