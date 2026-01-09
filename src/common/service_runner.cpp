@@ -1,20 +1,36 @@
 #include "service_runner.h"
+#include <chrono>
+
+namespace {
+
+std::chrono::steady_clock::time_point calc_next_time(
+    std::chrono::steady_clock::time_point cur_time, double interval
+) {
+    auto duration = std::chrono::duration<double, std::milli>(interval);
+    return (cur_time + std::chrono::duration_cast<std::chrono::steady_clock::duration>(duration));
+}
+
+std::chrono::steady_clock::time_point calc_next_time(double interval) {
+    return calc_next_time(std::chrono::steady_clock::now(), interval);
+}
+
+}
 
 namespace common {
 
 ServicesRunner::ServicesRunner(
     std::vector<std::shared_ptr<IService>> svcs, 
     std::shared_ptr<IService> warmup_svc,
-    int inter, double stddev, int max_noise, 
+    double interval, double stddev, double max_noise, 
     std::mt19937& rng, std::latch *start_sig, int pool_size
-): services(svcs), warmup_service(warmup_svc), interval(inter),
+): services(svcs), warmup_service(warmup_svc), interval(interval),
    start_signal(start_sig), scheduler_timer(io_context),
    pool(pool_size),
    work_guard(boost::asio::make_work_guard(io_context))
 {
     completion_signal = std::make_unique<std::latch>(services.size());
 
-    if (inter == -1) {
+    if (interval < 0) {
         this->noises = util::empty_noises();
     } else {
         this->noises = util::generate_noises(
@@ -66,9 +82,9 @@ void ServicesRunner::warmup() {
 
 void ServicesRunner::init_first_schedules() {
     std::lock_guard<std::mutex> lock(queue_mutex);
-    auto curTime = std::chrono::steady_clock::now();
+    auto cur_time = std::chrono::steady_clock::now();
     for (auto& svc : services) {
-        auto next = curTime + std::chrono::milliseconds(svc->cur_interval());
+        auto next = calc_next_time(cur_time, svc->cur_interval());
         schedule_queue.push({next, svc});
         if (interval != -1) break;
     }
@@ -94,17 +110,17 @@ void ServicesRunner::start_next_task() {
 void ServicesRunner::process_task(ScheduleEntry entry) {
     if (completion_signal->try_wait()) return;
 
-    bool hasMore = entry.service->reserve();
+    bool has_more = entry.service->reserve();
     {
         std::lock_guard<std::mutex> lock(queue_mutex);
-        if (hasMore) {
-            auto nextTime = std::chrono::steady_clock::now() + std::chrono::milliseconds(entry.service->cur_interval());
-            schedule_queue.push({nextTime, entry.service});
+        if (has_more) {
+            auto next_time = calc_next_time(entry.service->cur_interval());
+            schedule_queue.push({next_time, entry.service});
         } else if (interval != -1 && current_service_idx < services.size() - 1) {
             int noise = noises.next();
-            auto nextTime = std::chrono::steady_clock::now() + std::chrono::milliseconds(interval + noise);
+            auto next_time = calc_next_time(interval + noise);
             current_service_idx += 1;
-            schedule_queue.push({nextTime, services[current_service_idx]});
+            schedule_queue.push({next_time, services[current_service_idx]});
         }
     }
 

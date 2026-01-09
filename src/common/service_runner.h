@@ -23,7 +23,7 @@ private:
 
     std::vector<std::shared_ptr<IService>> services;
     std::shared_ptr<IService> warmup_service;
-    int interval;
+    double interval;
     util::Noises noises;
 
     std::latch *start_signal;
@@ -37,7 +37,7 @@ private:
     std::priority_queue<ScheduleEntry, std::vector<ScheduleEntry>, std::greater<ScheduleEntry>> schedule_queue;
     std::mutex queue_mutex;
 
-    std::atomic<int> current_service_idx{0};
+    std::atomic<size_t> current_service_idx{0};
     std::atomic<bool> is_closed{false};
 
     void warmup();
@@ -48,7 +48,7 @@ private:
 public:
     ServicesRunner(std::vector<std::shared_ptr<IService>> svcs, 
                    std::shared_ptr<IService> warmup_svc,
-                   int inter, double stddev, int max_noise, 
+                   double interval, double stddev, double max_noise, 
                    std::mt19937& rng, std::latch *start_sig, int pool_size);
     virtual ~ServicesRunner() = default;
 

@@ -3,10 +3,10 @@
 
 namespace common {
 
-AbstractService::AbstractService(int round_cnt, int interval, util::Noises noises) :
+AbstractService::AbstractService(int round_cnt, double interval, util::Noises noises) :
     round_cnt(round_cnt), interval(interval), noises(std::move(noises)), cur_idx_reserved(0) {}
 
-int AbstractService::cur_interval() {
+double AbstractService::cur_interval() {
     int cur_noise = noises.next();
     return interval + cur_noise;
 }

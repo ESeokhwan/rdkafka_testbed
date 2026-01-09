@@ -13,20 +13,20 @@ const size_t MAX_NOISE_LIST_LENGTH = 1000000;
 
 class Noises {
 private:
-    std::vector<int> noises;
+    std::vector<double> noises;
 
-    int cur_idx;
+    size_t cur_idx;
 
 public:
-    Noises(std::vector<int> noises);
+    Noises(std::vector<double> noises);
     Noises();
     ~Noises() = default;
 
-    int get_cur_idx();
-    int next();
+    size_t get_cur_idx();
+    double next();
 };
 
-Noises generate_noises(double stddev, int max_abs_noise, int length, std::mt19937& random_engine);
+Noises generate_noises(double stddev, double max_abs_noise, size_t length, std::mt19937& random_engine);
 
 Noises empty_noises();
 

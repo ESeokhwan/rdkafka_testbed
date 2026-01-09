@@ -67,7 +67,7 @@ private:
     mt19937 rng = mt19937(rd());
 
     void init_clients();
-    shared_ptr<IService> make_service(mosquitto *mosq_client, std::string prefix, int interval, int msg_size);
+    shared_ptr<IService> make_service(mosquitto *mosq_client, std::string prefix, double interval, int msg_size);
     shared_ptr<IService> make_warmup_service(mosquitto *mosq_client);
     void join_clients();
 
@@ -165,7 +165,7 @@ void V2xMqttExprProducerApp::init_clients() {
     }
 }
 
-shared_ptr<IService> V2xMqttExprProducerApp::make_service(mosquitto *mosq_client, std::string topic, int interval, int msg_size) {
+shared_ptr<IService> V2xMqttExprProducerApp::make_service(mosquitto *mosq_client, std::string topic, double interval, int msg_size) {
     shared_ptr<moniq::adaptor::ILatencyMonitoringMessageAdaptor> adaptor = 
         make_shared<moniq::adaptor::JsonBasedLatencyMonitoringMessageGenerator>(msg_size, min(msg_size, 1000));
     return make_shared<producer::MosqProducerService>(

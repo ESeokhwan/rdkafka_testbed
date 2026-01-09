@@ -33,9 +33,9 @@ struct Arguments {
     int client_cnt;
     int topic_cnt_per_client;
     int msg_cnt_per_topic;
-    int interval;
+    double interval;
     double interval_noise_stddev;
-    int interval_btw_topic;
+    double interval_btw_topic;
     double interval_btw_topic_noise_stddev;
     int msg_size;
     bool is_sync;
@@ -317,7 +317,7 @@ Arguments parse_arguments(int argc, char** argv) {
     args.client_cnt = 1;
     args.topic_cnt_per_client = 1;
     args.msg_cnt_per_topic = 1;
-    args.interval = 1000;
+    args.interval = 1000.0;
     args.interval_noise_stddev = 0;
     args.interval_btw_topic = -1;
     args.interval_btw_topic_noise_stddev = 0;
@@ -373,9 +373,9 @@ Arguments parse_arguments(int argc, char** argv) {
             case util::CLIENT_CNT_OPTION.get_val(): args.client_cnt = atoi(optarg); break;
             case util::TOPIC_CNT_PER_CLIENT_OPTION.get_val(): args.topic_cnt_per_client = atoi(optarg); break;
             case util::MSG_CNT_PER_TOPIC_OPTION.get_val(): args.msg_cnt_per_topic = atoi(optarg); break;
-            case util::INTERVAL_OPTION.get_val(): args.interval = atoi(optarg); break;
+            case util::INTERVAL_OPTION.get_val(): args.interval = atof(optarg); break;
             case util::INTERVAL_NOISE_STDDEV_OPTION.get_val(): args.interval_noise_stddev = atof(optarg); break;
-            case util::INTERVAL_BTW_TOPIC_OPTION.get_val(): args.interval_btw_topic = atoi(optarg); break;
+            case util::INTERVAL_BTW_TOPIC_OPTION.get_val(): args.interval_btw_topic = atof(optarg); break;
             case util::INTERVAL_BTW_TOPIC_NOISE_STDDEV_OPTION.get_val(): args.interval_btw_topic_noise_stddev = atof(optarg); break;
             case util::MSG_SIZE_OPTION.get_val(): args.msg_size = atoi(optarg); break;
             case util::IS_SYNC_OPTION.get_val(): args.is_sync = true; break;
