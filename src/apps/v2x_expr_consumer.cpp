@@ -183,18 +183,21 @@ int main(int argc, char *argv[]) {
         per_sec_outs.push_back(std::move(per_sec_out));
     }
 
+    int client_cnt = args.client_cnt;
+    if (client_cnt < 0) client_cnt = services.size();
+
     shared_ptr<moniq::MonitorQueue> monitor_queue = make_shared<moniq::MonitorQueue>();
     shared_ptr<moniq::writer::IMonitorLogWriteStrategy> write_strategy = make_shared<monitor::StatSumPerSecMonitorLogWriteStrategy>(services);
     shared_ptr<moniq::writer::MonitorLogWriter> writer = make_shared<moniq::writer::MonitorLogWriter>(monitor_queue, write_strategy, -1, -1);
 
     thread writer_thread(&moniq::writer::MonitorLogWriter::run, writer);
 
-    vector<struct ConsumerThreadArg> consumer_thread_args(args.client_cnt);
+    vector<struct ConsumerThreadArg> consumer_thread_args(client_cnt);
     vector<thread> consumer_threads;
 
-    vector<int> assigned_idx = assign_services(args.client_cnt, services.size());
+    vector<int> assigned_idx = assign_services(client_cnt, services.size());
 
-    for (int i = 0; i < args.client_cnt; i++) {
+    for (int i = 0; i < client_cnt; i++) {
         consumer_thread_args[i].broker = args.broker;
         consumer_thread_args[i].group_id = args.prefix + "group_" + to_string(i);
         consumer_thread_args[i].topics.push_back(args.prefix + services[assigned_idx[i]].name);
@@ -205,7 +208,7 @@ int main(int argc, char *argv[]) {
         consumer_threads.emplace_back(consume_run, &consumer_thread_args[i]);
     }
 
-    cout << "All threads are ready. Starting publishing for " << args.client_cnt << " clients." << endl;
+    cout << "All threads are ready. Starting publishing for " << client_cnt << " clients." << endl;
     cout << "Sleep 5s to wait Kakfa" << endl;
     this_thread::sleep_for(chrono::milliseconds(5000));
 
