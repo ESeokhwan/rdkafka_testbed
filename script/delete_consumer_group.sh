@@ -127,7 +127,7 @@ for ((i=1; i<=COUNT; ++i)); do
         group="$PREFIX$i"
         $KAFKA_BIN_PATH/kafka-consumer-groups.sh --bootstrap-server "$BROKER" --delete --group "$group"
         if [ $VERBOSE -eq 1 ]; then
-            echo "[CG_DELETER] ➡️ deleting $group" >&2
+            echo "[CG_DELETER] ✅ deleting $group" >&2
         fi
     } &
     (( ++running >= MAX_PARALLEL )) && { wait -n; ((running--)); }

@@ -126,26 +126,26 @@ for retry in $(seq 1 $RETRIES); do
 
     ALL_CONNECTED=1
     for ((i=1; i<=COUNT; ++i)); do
-      group="$PREFIX$i"
-      DESC=$($KAFKA_BIN_PATH/kafka-consumer-groups.sh --bootstrap-server $BROKER --describe --group $group 2>&1)
+        group="$PREFIX$i"
+        DESC=$($KAFKA_BIN_PATH/kafka-consumer-groups.sh --bootstrap-server $BROKER --describe --group $group 2>&1)
 
-      if [[ "$DESC" == *"does not exist"* ]]; then
-        if [ $VERBOSE -eq 1 ]; then
-            echo "[CG_CHECKER] $group has not connected yet."
+        if [[ "$DESC" == *"does not exist"* ]]; then
+            if [ $VERBOSE -eq 1 ]; then
+                echo "[CG_CHECKER] $group has not connected yet."
+            fi
+            ALL_CONNECTED=0
+            break
+        elif [ $VERBOSE -eq 1 ]; then
+            echo "[CG_CHECKER] $group is connected."
         fi
-        ALL_CONNECTED=0
-        break
-      else if [ $VERBOSE -eq 1 ]; then
-        echo "[CG_CHECKER] $group is connected."
-      fi
     done
     if [[ $ALL_CONNECTED -eq 1 ]]; then
         echo "[CG_CHECKER] ✅ All $COUNT Consumer Groups are connected."
         exit 0
     else
-        echo "[CG_CHECKER] ➡️ Not all Consumer Groups are connected yet."
+        echo "[CG_CHECKER] ⚠️ Not all Consumer Groups are connected yet."
         if [[ $retry -lt $RETRIES ]]; then
-            echo "[CG_CHECKER] ➡️ Retrying in $retry seconds..."
+            echo "[CG_CHECKER] Retrying in $retry seconds..."
             sleep $retry
         fi
     fi
