@@ -123,11 +123,8 @@ if [ "$VERBOSE" -eq 1 ]; then
     echo "--------------------------"
 
     # Handle positional arguments. After the getopt loop, "$@" contains the remaining positional arguments.
-    if [ -n "$@" ]; then
-        echo "Positional Arguments:"
-        for arg in "$@"; do
-            echo "  - $arg"
-        done
+    if [ $# -gt 0 ]; then
+        echo "Positional Arguments: $@"
     fi
 fi
 
