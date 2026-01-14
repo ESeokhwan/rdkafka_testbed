@@ -114,7 +114,7 @@ void consume_run(struct ConsumerThreadArg *arg) {
     conf->set("bootstrap.servers", arg->broker, errstr);
     conf->set("group.id", arg->group_id, errstr);
     conf->set("client.id", arg->client_id, errstr);
-    conf->set("auto.offset.reset", "earliest", errstr);
+    conf->set("auto.offset.reset", "latest", errstr);
     conf->set("fetch.min.bytes", "1", errstr);
     conf->set("log_level", "0", errstr);
     if (arg->verbose) {
@@ -213,6 +213,7 @@ int main(int argc, char *argv[]) {
     this_thread::sleep_for(chrono::milliseconds(5000));
 
     signal(SIGINT, interrupt_handler);
+    signal(SIGTERM, interrupt_handler);
     start_flag.store(true, memory_order_release);
 
     {

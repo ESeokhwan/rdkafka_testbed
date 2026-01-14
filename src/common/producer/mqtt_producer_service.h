@@ -1,9 +1,8 @@
 #pragma once
 
 #include "service.h"
+#include "monitor/stat_sum_monitor_message_adaptor.h"
 
-#include <libmoniq/adaptor/message_adaptor.h>
-#include <libmoniq/adaptor/latency_monitoring_message_adaptor.h>
 #include <libmoniq/monitor_queue.h>
 #include <libmoniq/writer/monitor_log_writer.h>
 #include <memory>
@@ -17,6 +16,7 @@ namespace producer {
 
 class MosqProducerService: public AbstractService {
 private:
+    const std::string service_name;
     const std::string topic_name;
     const size_t round_cnt;
     const bool log_enabled;
@@ -25,7 +25,7 @@ private:
     mosquitto *mosq_client;
     const bool need_to_cleanup_client;
 
-    std::shared_ptr<moniq::adaptor::ILatencyMonitoringMessageAdaptor> adaptor;
+    std::shared_ptr<common::monitor::StatSumMonitorMessageGenerator> adaptor;
     std::shared_ptr<moniq::MonitorQueue> monitor_queue;
     std::shared_ptr<moniq::writer::MonitorLogWriter> writer;
 
@@ -34,6 +34,7 @@ private:
 public:
     MosqProducerService(
         mosquitto *mosq_client,
+        const std::string& service_name,
         const std::string& topic_name,
         size_t round_cnt,
         double interval,
@@ -42,7 +43,7 @@ public:
         std::mt19937& rng,
         bool log_enabled,
         bool msg_tagged,
-        std::shared_ptr<moniq::adaptor::ILatencyMonitoringMessageAdaptor> &adaptor,
+        std::shared_ptr<common::monitor::StatSumMonitorMessageGenerator> &adaptor,
         std::shared_ptr<moniq::MonitorQueue> &monitor_queue,
         std::shared_ptr<moniq::writer::MonitorLogWriter> &writer
     );
@@ -50,6 +51,7 @@ public:
     MosqProducerService(
         const std::string& broker,
         const std::string& client_id,
+        const std::string& service_name,
         const std::string& topic_name,
         size_t round_cnt,
         double interval,
@@ -58,7 +60,7 @@ public:
         std::mt19937& rng,
         bool log_enabled,
         bool msg_tagged,
-        std::shared_ptr<moniq::adaptor::ILatencyMonitoringMessageAdaptor> &adaptor,
+        std::shared_ptr<common::monitor::StatSumMonitorMessageGenerator> &adaptor,
         std::shared_ptr<moniq::MonitorQueue> &monitor_queue,
         std::shared_ptr<moniq::writer::MonitorLogWriter> &writer
     );

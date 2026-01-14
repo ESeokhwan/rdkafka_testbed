@@ -4,6 +4,7 @@
 #include "util/cli_arg_util.h"
 #include "util/time_util.h"
 #include "producer/mqtt_producer_service.h"
+#include "monitor/stat_sum_monitor_message_adaptor.h"
 
 #include <csignal>
 #include <iostream>
@@ -18,7 +19,6 @@
 #include <libmoniq/writer/monitor_log_writer.h>
 #include <libmoniq/writer/write_strategy/console_monitor_log_write_strategy.h>
 #include <libmoniq/writer/write_strategy/monitor_log_write_strategy.h>
-#include <libmoniq/adaptor/latency_monitoring_message_adaptor.h>
 #include <libmoniq/adaptor/message_adaptor.h>
 
 using namespace std;
@@ -65,7 +65,7 @@ private:
     vector<thread> client_threads;
     vector<mosquitto *> shared_clients;
 
-    shared_ptr<moniq::adaptor::ILatencyMonitoringMessageAdaptor> adaptor;
+    shared_ptr<common::monitor::StatSumMonitorMessageGenerator> adaptor;
     random_device rd;
 
     void init_services();
@@ -77,7 +77,7 @@ public:
     BasicMqttProducersTest(
         shared_ptr<moniq::MonitorQueue> &monitor_queue,
         shared_ptr<moniq::writer::MonitorLogWriter> &writer,
-        shared_ptr<moniq::adaptor::ILatencyMonitoringMessageAdaptor> &adaptor,
+        shared_ptr<common::monitor::StatSumMonitorMessageGenerator> &adaptor,
         Arguments args
     ): AbstractApplication(monitor_queue, writer), args(args), adaptor(adaptor) {
 
@@ -127,8 +127,8 @@ int main(int argc, char *argv[]) {
         << "Verbose: " << (args.verbose ? "on" : "off") << "\n"
         << "Start time: " << util::current_time_str() << endl;
 
-    shared_ptr<moniq::adaptor::ILatencyMonitoringMessageAdaptor> adaptor =
-        make_shared<moniq::adaptor::JsonBasedLatencyMonitoringMessageGenerator>(args.msg_size, min(args.msg_size, 1000));
+    shared_ptr<common::monitor::StatSumMonitorMessageGenerator> adaptor =
+        make_shared<common::monitor::StatSumMonitorMessageGenerator>(args.msg_size, min(args.msg_size, 1000));
     shared_ptr<moniq::MonitorQueue> monitor_queue = make_shared<moniq::MonitorQueue>();
     shared_ptr<moniq::writer::IMonitorLogWriteStrategy> write_strategy =
         make_shared<moniq::writer::ConsoleMonitorLogWriteStrategy>(args.scrapable);
@@ -172,6 +172,7 @@ void BasicMqttProducersTest::init_sharing_prod_services() {
             shared_ptr<IService> service = make_shared<producer::MosqProducerService>(
                 mosq_client,
                 args.prefix + "_" + to_string(i) + "_" + to_string(j),
+                args.prefix + "_" + to_string(i) + "_" + to_string(j),
                 args.msg_cnt_per_topic,
                 args.interval,
                 args.interval_noise_stddev,
@@ -187,6 +188,7 @@ void BasicMqttProducersTest::init_sharing_prod_services() {
         }
         shared_ptr<IService> warmup_service = make_shared<producer::MosqProducerService>(
             mosq_client,
+            "warmup",
             args.warmup_topic,
             args.warmup_cnt,
             0,
@@ -217,6 +219,7 @@ void BasicMqttProducersTest::init_standalone_services() {
                 args.broker,
                 args.prefix + "_" + to_string(i),
                 args.prefix + "_" + to_string(i) + "_" + to_string(j),
+                args.prefix + "_" + to_string(i) + "_" + to_string(j),
                 args.msg_cnt_per_topic,
                 args.interval,
                 args.interval_noise_stddev,
@@ -233,6 +236,7 @@ void BasicMqttProducersTest::init_standalone_services() {
         shared_ptr<IService> warmup_service = make_shared<producer::MosqProducerService>(
             args.broker,
             "warmup_" + to_string(i),
+            "warmup",
             args.warmup_topic,
             args.warmup_cnt,
             0,

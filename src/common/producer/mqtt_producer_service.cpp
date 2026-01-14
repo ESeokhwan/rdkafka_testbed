@@ -33,6 +33,7 @@ namespace producer {
 
 MosqProducerService::MosqProducerService(
     mosquitto *mosq_client,
+    const std::string& service_name,
     const std::string& topic_name,
     size_t round_cnt,
     double interval,
@@ -41,7 +42,7 @@ MosqProducerService::MosqProducerService(
     std::mt19937& rng,
     bool log_enabled,
     bool msg_tagged,
-    std::shared_ptr<moniq::adaptor::ILatencyMonitoringMessageAdaptor> &adaptor,
+    std::shared_ptr<common::monitor::StatSumMonitorMessageGenerator> &adaptor,
     std::shared_ptr<moniq::MonitorQueue> &monitor_queue,
     std::shared_ptr<moniq::writer::MonitorLogWriter> &writer
 ): AbstractService(
@@ -49,7 +50,7 @@ MosqProducerService::MosqProducerService(
     util::generate_noises(
         interval_noise_stddev, interval_max_abs_noise,
         std::min(round_cnt, util::MAX_NOISE_LIST_LENGTH), rng)
-    ), topic_name(topic_name), round_cnt(round_cnt),
+    ), service_name(service_name), topic_name(topic_name), round_cnt(round_cnt),
     log_enabled(log_enabled), msg_tagged(msg_tagged),
     mosq_client(mosq_client), need_to_cleanup_client(false),
     adaptor(adaptor), monitor_queue(monitor_queue), writer(writer) {}
@@ -57,6 +58,7 @@ MosqProducerService::MosqProducerService(
 MosqProducerService::MosqProducerService(
     const std::string& host,
     const std::string& client_id,
+    const std::string& service_name,
     const std::string& topic_name,
     size_t round_cnt,
     double interval,
@@ -65,7 +67,7 @@ MosqProducerService::MosqProducerService(
     std::mt19937& rng,
     bool log_enabled,
     bool msg_tagged,
-    std::shared_ptr<moniq::adaptor::ILatencyMonitoringMessageAdaptor> &adaptor,
+    std::shared_ptr<common::monitor::StatSumMonitorMessageGenerator> &adaptor,
     std::shared_ptr<moniq::MonitorQueue> &monitor_queue,
     std::shared_ptr<moniq::writer::MonitorLogWriter> &writer
 ): AbstractService(
@@ -73,7 +75,7 @@ MosqProducerService::MosqProducerService(
     util::generate_noises(
         interval_noise_stddev, interval_max_abs_noise,
         std::min(round_cnt, util::MAX_NOISE_LIST_LENGTH), rng)
-    ), topic_name(topic_name), round_cnt(round_cnt),
+    ), service_name(service_name), topic_name(topic_name), round_cnt(round_cnt),
     log_enabled(log_enabled), msg_tagged(msg_tagged),
     mosq_client(create_mosq_client(host, client_id)),
     need_to_cleanup_client(true), adaptor(adaptor),
@@ -88,9 +90,9 @@ void MosqProducerService::work() {
     std::string core_msg = topic_name + "_" + std::to_string(idx);
     if (msg_tagged && log_enabled) core_msg = "R" + core_msg;
 
-    std::string msg = this->adaptor->generate(core_msg);
+    double requested_at = double(util::get_current_timestamp_nano()) / (1000.0 * 1000.0);
+    std::string msg = this->adaptor->generate(core_msg, requested_at, service_name);
     if (log_enabled) {
-        double requested_at = double(util::get_current_timestamp_nano()) / (1000.0 * 1000.0);
         monitor_queue->enqueue(std::make_unique<moniq::MonitorLog>(
             core_msg, "REQUEST", requested_at));
         writer->notify_if_needed();

@@ -1,6 +1,5 @@
 #include "monitor/stat_sum_monitor_log.h"
-
-#include <libmoniq/adaptor/latency_monitoring_message_adaptor.h>
+#include "monitor/stat_sum_monitor_message_adaptor.h"
 
 
 namespace common {
@@ -22,11 +21,9 @@ std::vector<std::string> StatSumMonitorLog::get_values() const {
 }
 
 void StatSumMonitorLog::preprocess() {
-    std::string SERVICE_KEY = "service";
-
     moniq::JsonBasedLatencyMonitorLog::preprocess();
-    moniq::adaptor::ExtractOnlyJsonBasedLatencyMonitoringMessageAdaptor message_adaptor;
-    extracted_service_ = message_adaptor.extract_other_kvs(get_raw_data(), SERVICE_KEY);
+    common::monitor::ExtractOnlyStatSumMonitorMessageAdaptor message_adaptor;
+    extracted_service_ = message_adaptor.extract_service_name(get_raw_data());
 }
 
 std::string StatSumMonitorLog::get_service() const {

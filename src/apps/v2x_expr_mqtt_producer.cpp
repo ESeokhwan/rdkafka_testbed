@@ -1,4 +1,5 @@
 #include "abstract_application.h"
+#include "monitor/stat_sum_monitor_message_adaptor.h"
 #include "service.h"
 #include "service_runner.h"
 #include "util/cli_arg_util.h"
@@ -67,7 +68,7 @@ private:
     mt19937 rng = mt19937(rd());
 
     void init_clients();
-    shared_ptr<IService> make_service(mosquitto *mosq_client, std::string prefix, double interval, int msg_size);
+    shared_ptr<IService> make_service(mosquitto *mosq_client, std::string service_name, std::string topic, double interval, int msg_size);
     shared_ptr<IService> make_warmup_service(mosquitto *mosq_client);
     void join_clients();
 
@@ -151,7 +152,7 @@ void V2xMqttExprProducerApp::init_clients() {
         mosq_clients.push_back(mosq_client);
 
         for (const auto &service_info: service_infos) {
-            services.push_back(make_service(mosq_client, service_info.service_name + "/Car" + to_string(i), service_info.interval, service_info.msg_size));
+            services.push_back(make_service(mosq_client, service_info.service_name, service_info.service_name + "/Car" + to_string(i), service_info.interval, service_info.msg_size));
         }
         auto warmup_service = make_warmup_service(mosq_client);
 
@@ -165,11 +166,12 @@ void V2xMqttExprProducerApp::init_clients() {
     }
 }
 
-shared_ptr<IService> V2xMqttExprProducerApp::make_service(mosquitto *mosq_client, std::string topic, double interval, int msg_size) {
-    shared_ptr<moniq::adaptor::ILatencyMonitoringMessageAdaptor> adaptor = 
-        make_shared<moniq::adaptor::JsonBasedLatencyMonitoringMessageGenerator>(msg_size, min(msg_size, 1000));
+shared_ptr<IService> V2xMqttExprProducerApp::make_service(mosquitto *mosq_client, std::string service_name, std::string topic, double interval, int msg_size) {
+    shared_ptr<common::monitor::StatSumMonitorMessageGenerator> adaptor =
+        make_shared<common::monitor::StatSumMonitorMessageGenerator>(msg_size, min(msg_size, 1000));
     return make_shared<producer::MosqProducerService>(
         mosq_client,
+        service_name,
         topic,
         (args.running_time * 1000) / interval,
         interval,
@@ -185,10 +187,11 @@ shared_ptr<IService> V2xMqttExprProducerApp::make_service(mosquitto *mosq_client
 }
 
 shared_ptr<IService> V2xMqttExprProducerApp::make_warmup_service(mosquitto *mosq_client) {
-    shared_ptr<moniq::adaptor::ILatencyMonitoringMessageAdaptor> adaptor = 
-        make_shared<moniq::adaptor::JsonBasedLatencyMonitoringMessageGenerator>(10, 100);
+    shared_ptr<common::monitor::StatSumMonitorMessageGenerator> adaptor = 
+        make_shared<common::monitor::StatSumMonitorMessageGenerator>(10, 100);
     return make_shared<producer::MosqProducerService>(
         mosq_client,
+        "warmup",
         args.warmup_topic,
         args.warmup_cnt,
         0,
