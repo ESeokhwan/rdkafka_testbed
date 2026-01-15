@@ -38,6 +38,7 @@ struct Arguments {
     int start_barrier_delay;
 
     string outdir;
+    string out_prefix;
 };
 
 struct ConsumerThreadArg {
@@ -103,7 +104,7 @@ namespace {
     vector<unique_ptr<ostream>> latency_outs;
     vector<unique_ptr<ostream>> per_sec_outs;
 
-    vector<monitor::ServiceInfo> generate_services(vector<struct ServiceArg> &service_args, string outdir);
+    vector<monitor::ServiceInfo> generate_services(vector<struct ServiceArg> &service_args, string outdir, string out_prefix);
     Arguments parse_arguments(int argc, char **argv);
     void interrupt_handler(int signum);
     vector<int> assign_services(int num_cars, int num_services);
@@ -125,7 +126,8 @@ int main(int argc, char *argv[]) {
             << "Start Barrier Delay: " << args.start_barrier_delay << "\n"
             << "Scrapable: " << (args.scrapable ? "on" : "off") << "\n"
             << "Log Sampling: " << (args.read_tagged_only ? "on" : "off") << "\n"
-            << "Output Directory: " << args.outdir << endl;
+            << "Output Directory: " << args.outdir 
+            << "Output File Prefix: " << args.out_prefix << endl;
     }
 
     vector<struct ServiceArg> service_args = {
@@ -137,7 +139,7 @@ int main(int argc, char *argv[]) {
 
     shared_ptr<moniq::MonitorQueue> monitor_queue = make_shared<moniq::MonitorQueue>();
     shared_ptr<moniq::writer::IMonitorLogWriteStrategy> write_strategy =
-        make_shared<monitor::StatSumPerSecMonitorLogWriteStrategy>(generate_services(service_args, args.outdir));
+        make_shared<monitor::StatSumPerSecMonitorLogWriteStrategy>(generate_services(service_args, args.outdir, args.out_prefix));
     shared_ptr<moniq::writer::MonitorLogWriter> writer = make_shared<moniq::writer::MonitorLogWriter>(monitor_queue, write_strategy, -1, -1);
 
     app = new V2xExprConsumerApp(monitor_queue, writer, args, service_args);
@@ -207,16 +209,16 @@ void V2xExprConsumerApp::cleanup_main() {
 
 namespace {
 
-vector<monitor::ServiceInfo> generate_services(vector<struct ServiceArg> &service_args, string outdir) {
+vector<monitor::ServiceInfo> generate_services(vector<struct ServiceArg> &service_args, string outdir, string out_prefix) {
     std::string latency_file_postfix = "latency.csv";
     std::string per_sec_file_postfix = "per_sec.csv";
 
     vector<monitor::ServiceInfo> services;
     for (size_t i = 0; i < service_args.size(); i++) {
         unique_ptr<ostream> latecny_out = make_unique<ofstream>(
-            outdir + "/" + service_args[i].name + "_" + latency_file_postfix);
+            outdir + "/" + out_prefix + service_args[i].name + "_" + latency_file_postfix);
         unique_ptr<ostream> per_sec_out = make_unique<ofstream>(
-            outdir + "/" + service_args[i].name + "_" + per_sec_file_postfix);
+            outdir + "/" + out_prefix + service_args[i].name + "_" + per_sec_file_postfix);
         services.push_back({
             service_args[i].name, service_args[i].threshold,
             latecny_out.get(), per_sec_out.get(), &cout
@@ -279,6 +281,8 @@ Arguments parse_arguments(int argc, char** argv) {
     args.client_cnt = 1;
     args.running_time = 10000;
     args.start_barrier_delay = 2000;
+    args.outdir = "";
+    args.out_prefix = "";
     args.scrapable = false;
     args.read_tagged_only = false;
     args.verbose = false;
@@ -294,6 +298,7 @@ Arguments parse_arguments(int argc, char** argv) {
         util::SCRAPABLE_OPTION,
         util::READ_TAGGED_ONLY_OPTION,
         util::OUTDIR_OPTION,
+        util::OUT_PREFIX_OPTION,
         util::VERBOSE_OPTION,
     };
 
@@ -311,6 +316,7 @@ Arguments parse_arguments(int argc, char** argv) {
             case util::SCRAPABLE_OPTION.get_val(): args.scrapable = true; break;
             case util::READ_TAGGED_ONLY_OPTION.get_val(): args.read_tagged_only = true; break;
             case util::OUTDIR_OPTION.get_val(): args.outdir = optarg; break;
+            case util::OUT_PREFIX_OPTION.get_val(): args.out_prefix = optarg; break;
             case util::VERBOSE_OPTION.get_val(): args.verbose = true; break;
             default:
                 cerr << "Error: Unknown option or missing argument." << endl << endl;

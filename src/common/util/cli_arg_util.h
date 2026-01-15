@@ -36,7 +36,8 @@ enum class LongOnlyOptionVals {
     SHARE_PRODUCER,
     GROUP_PREFIX,
     CLIENT_PREFIX,
-    TOPIC_PREFIX
+    TOPIC_PREFIX,
+    OUT_PREFIX
 };
 
 }
@@ -111,6 +112,7 @@ constexpr OptionWrapper MSG_SIZE_OPTION = {"msg_size", required_argument, nullpt
 constexpr OptionWrapper RUNNING_TIME_OPTION = {"running_time", required_argument, nullptr, 'r', "Running time (ms)"};
 
 constexpr OptionWrapper OUTDIR_OPTION = {"outdir", required_argument, nullptr, 'o', "Output directory"};
+constexpr OptionWrapper OUT_PREFIX_OPTION = {"out_prefix", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::OUT_PREFIX), "Prefix for output files"};
 
 
 constexpr OptionWrapper CLIENT_CNT_OPTION = {"client_cnt", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::CLIENT_CNT), "Number of clients"};
