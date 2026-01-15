@@ -106,33 +106,33 @@ namespace {
 int main(int argc, char *argv[]) {
     Arguments args = parse_arguments(argc, argv);
 
-    cout
-        << "client start\n"
-        << "Broker: " << args.broker << "\n"
-        << "Prefix: " << args.prefix << "\n"
-        << "Client Count: " << args.client_cnt << "\n"
-        << "Topic Count per Client: " << args.topic_cnt_per_client << "\n"
-        << "Message Count per Topic: " << args.msg_cnt_per_topic << "\n"
-        << "Interval: " << args.interval << "\n"
-        << "Interval Noise Stddev: " << args.interval_noise_stddev << "\n"
-        << "Interval Between Topics: " << args.interval_btw_topic << "\n"
-        << "Interval Between Topics Noise Stddev: " << args.interval_btw_topic_noise_stddev << "\n"
-        << "Message Size: " << args.msg_size << "\n"
-        << "Is Sync: " << (args.is_sync ? "on" : "off") << "\n"
-        << "Ignore Response: " << (args.ignore_response ? "on" : "off") << "\n"
-        << "Need Flush: " << (args.need_flush ? "on" : "off") << "\n"
-        << "Sample Log: " << (args.sample_log ? "on" : "off") << "\n"
-        << "Tag Record: " << (args.tag_log ? "on" : "off") << "\n"
-        << "Share Producer: " << (args.share_producer ? "on" : "off") << "\n"
-        << "Warmup Count: " << args.warmup_cnt << "\n"
-        << "Warmup Topic: " << args.warmup_topic << "\n"
-        << "Start Barrier Delay: " << args.start_barrier_delay << "\n"
-        << "Monitoring Batch Size: " << args.monitoring_batch_size << "\n"
-        << "Service Runner Pool Size: " << args.service_runner_pool_size << "\n"
-        << "Scrapable: " << (args.scrapable ? "on" : "off") << "\n"
-        << "Output Directory: " << args.outdir << "\n"
-        << "Verbose: " << (args.verbose ? "on" : "off") << "\n"
-        << "Start time: " << util::current_time_str() << endl;
+    cout << "producer test starts at " << util::current_time_str() << endl;
+    if (args.verbose) {
+        cout
+            << "Broker: " << args.broker << "\n"
+            << "Prefix: " << args.prefix << "\n"
+            << "Client Count: " << args.client_cnt << "\n"
+            << "Topic Count per Client: " << args.topic_cnt_per_client << "\n"
+            << "Message Count per Topic: " << args.msg_cnt_per_topic << "\n"
+            << "Interval: " << args.interval << "\n"
+            << "Interval Noise Stddev: " << args.interval_noise_stddev << "\n"
+            << "Interval Between Topics: " << args.interval_btw_topic << "\n"
+            << "Interval Between Topics Noise Stddev: " << args.interval_btw_topic_noise_stddev << "\n"
+            << "Message Size: " << args.msg_size << "\n"
+            << "Is Sync: " << (args.is_sync ? "on" : "off") << "\n"
+            << "Ignore Response: " << (args.ignore_response ? "on" : "off") << "\n"
+            << "Need Flush: " << (args.need_flush ? "on" : "off") << "\n"
+            << "Sample Log: " << (args.sample_log ? "on" : "off") << "\n"
+            << "Tag Record: " << (args.tag_log ? "on" : "off") << "\n"
+            << "Share Producer: " << (args.share_producer ? "on" : "off") << "\n"
+            << "Warmup Count: " << args.warmup_cnt << "\n"
+            << "Warmup Topic: " << args.warmup_topic << "\n"
+            << "Start Barrier Delay: " << args.start_barrier_delay << "\n"
+            << "Monitoring Batch Size: " << args.monitoring_batch_size << "\n"
+            << "Service Runner Pool Size: " << args.service_runner_pool_size << "\n"
+            << "Scrapable: " << (args.scrapable ? "on" : "off") << "\n"
+            << "Output Directory: " << args.outdir << endl;
+    }
 
     shared_ptr<moniq::adaptor::IMessageAdaptor> adaptor =
         make_shared<moniq::adaptor::JsonBasedLatencyMonitoringMessageGenerator>(args.msg_size, min(args.msg_size, 1000));
@@ -144,6 +144,7 @@ int main(int argc, char *argv[]) {
 
     app = new BasicProducersTest(monitor_queue, writer, adaptor, args);
     signal(SIGINT, interrupt_handler);
+    signal(SIGTERM, interrupt_handler);
     app->run();
     app->cleanup();
 

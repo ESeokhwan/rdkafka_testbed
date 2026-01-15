@@ -107,22 +107,22 @@ namespace {
 int main(int argc, char *argv[]) {
     Arguments args = parse_arguments(argc, argv);
 
-    cout
-        << "client start\n"
-        << "Broker: " << args.broker << "\n"
-        << "Client Prefix: " << args.client_prefix << "\n"
-        << "Topic Prefix: " << args.topic_prefix << "\n"
-        << "Client Count: " << args.client_cnt << "\n"
-        << "Running Time: " << args.running_time << "\n"
-        << "Interval Noise Stddev Rate: " << args.interval_noise_stddev_rate << "\n"
-        << "Warmup Count: " << args.warmup_cnt << "\n"
-        << "Warmup Topic: " << args.warmup_topic << "\n"
-        << "Start Barrier Delay: " << args.start_barrier_delay << "\n"
-        << "Monitoring Batch Size: " << args.monitoring_batch_size << "\n"
-        << "Scrapable: " << (args.scrapable ? "on" : "off") << "\n"
-        << "Output Directory: " << args.outdir << "\n"
-        << "Verbose: " << (args.verbose ? "on" : "off") << "\n"
-        << "Start time: " << util::current_time_str() << endl;
+    cout << "v2x expr mqtt producer starts at " << util::current_time_str() << endl;
+    if (args.verbose) {
+        cout
+            << "Broker: " << args.broker << "\n"
+            << "Client Prefix: " << args.client_prefix << "\n"
+            << "Topic Prefix: " << args.topic_prefix << "\n"
+            << "Client Count: " << args.client_cnt << "\n"
+            << "Running Time: " << args.running_time << "\n"
+            << "Interval Noise Stddev Rate: " << args.interval_noise_stddev_rate << "\n"
+            << "Warmup Count: " << args.warmup_cnt << "\n"
+            << "Warmup Topic: " << args.warmup_topic << "\n"
+            << "Start Barrier Delay: " << args.start_barrier_delay << "\n"
+            << "Monitoring Batch Size: " << args.monitoring_batch_size << "\n"
+            << "Scrapable: " << (args.scrapable ? "on" : "off") << "\n"
+            << "Output Directory: " << args.outdir << endl;
+    }
 
     shared_ptr<moniq::MonitorQueue> monitor_queue = make_shared<moniq::MonitorQueue>();
     shared_ptr<moniq::writer::IMonitorLogWriteStrategy> write_strategy =
@@ -132,6 +132,7 @@ int main(int argc, char *argv[]) {
 
     app = new V2xMqttExprProducerApp(monitor_queue, writer, args);
     signal(SIGINT, interrupt_handler);
+    signal(SIGTERM, interrupt_handler);
     app->run();
     app->cleanup();
 

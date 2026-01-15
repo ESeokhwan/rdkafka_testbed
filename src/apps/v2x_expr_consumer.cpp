@@ -34,6 +34,8 @@ struct Arguments {
     bool read_tagged_only;
     bool verbose;
 
+    int start_barrier_delay;
+
     string outdir;
 };
 
@@ -75,6 +77,9 @@ void parse_arguments(int argc, char** argv, Arguments& args) {
 
     args.group_prefix="";
     args.topic_prefix="";
+    args.client_cnt = 1;
+    args.running_time = 10000;
+    args.start_barrier_delay = 2000;
     args.scrapable = false;
     args.read_tagged_only = false;
     args.verbose = false;
@@ -85,6 +90,7 @@ void parse_arguments(int argc, char** argv, Arguments& args) {
         util::TOPIC_PREFIX_OPTION,
         util::CLIENT_CNT_OPTION,
         util::RUNNING_TIME_OPTION,
+        util::START_BARRIER_DELAY_OPTION,
         util::SCRAPABLE_OPTION,
         util::READ_TAGGED_ONLY_OPTION,
         util::OUTDIR_OPTION,
@@ -101,6 +107,7 @@ void parse_arguments(int argc, char** argv, Arguments& args) {
             case util::TOPIC_PREFIX_OPTION.get_val(): args.topic_prefix = optarg; break;
             case util::CLIENT_CNT_OPTION.get_val(): args.client_cnt = atoi(optarg); break;
             case util::RUNNING_TIME_OPTION.get_val(): args.running_time = atoi(optarg); break;
+            case util::START_BARRIER_DELAY_OPTION.get_val(): args.start_barrier_delay = atoi(optarg); break;
             case util::SCRAPABLE_OPTION.get_val(): args.scrapable = true; break;
             case util::READ_TAGGED_ONLY_OPTION.get_val(): args.read_tagged_only = true; break;
             case util::OUTDIR_OPTION.get_val(): args.outdir = optarg; break;
@@ -151,18 +158,19 @@ int main(int argc, char *argv[]) {
     Arguments args;
     parse_arguments(argc, argv, args);
 
-    cout
-        << "client start\n"
-        << "Broker: " << args.broker << "\n"
-        << "Group Prefix: " << args.group_prefix << "\n"
-        << "Topic Prefix: " << args.topic_prefix << "\n"
-        << "Client Count: " << args.client_cnt << "\n"
-        << "Running Time: " << args.running_time << "\n"
-        << "Scrapable: " << (args.scrapable ? "on" : "off") << "\n"
-        << "Log Sampling: " << (args.read_tagged_only ? "on" : "off") << "\n"
-        << "Output Directory: " << args.outdir << "\n"
-        << "Verbose: " << (args.verbose ? "on" : "off") << "\n"
-        << "Start time: " << util::current_time_str() << endl;
+    cout << "v2x expr consumer starts at " << util::current_time_str() << endl;
+    if (args.verbose) {
+        cout
+            << "Broker: " << args.broker << "\n"
+            << "Group Prefix: " << args.group_prefix << "\n"
+            << "Topic Prefix: " << args.topic_prefix << "\n"
+            << "Client Count: " << args.client_cnt << "\n"
+            << "Running Time: " << args.running_time << "\n"
+            << "Start Barrier Delay: " << args.start_barrier_delay << "\n"
+            << "Scrapable: " << (args.scrapable ? "on" : "off") << "\n"
+            << "Log Sampling: " << (args.read_tagged_only ? "on" : "off") << "\n"
+            << "Output Directory: " << args.outdir << endl;
+    }
 
     std::string latency_file_postfix = "latency.csv";
     std::string per_sec_file_postfix = "per_sec.csv";
@@ -213,13 +221,13 @@ int main(int argc, char *argv[]) {
         consumer_thread_args[i].writer = writer;
         consumer_threads.emplace_back(consume_run, &consumer_thread_args[i]);
     }
-
-    cout << "All threads are ready. Starting publishing for " << client_cnt << " clients." << endl;
-    cout << "Sleep 5s to wait Kakfa" << endl;
-    this_thread::sleep_for(chrono::milliseconds(5000));
-
     signal(SIGINT, interrupt_handler);
     signal(SIGTERM, interrupt_handler);
+
+    cout << "All threads are ready.\n"
+         << "Start " << client_cnt << " consumers at " << args.start_barrier_delay << "milli seconds later." << endl;
+    this_thread::sleep_for(chrono::milliseconds(args.start_barrier_delay));
+
     start_flag.store(true, memory_order_release);
 
     {
