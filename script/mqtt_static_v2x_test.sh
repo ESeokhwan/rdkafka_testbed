@@ -358,9 +358,10 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
   R_CONSUMER_ID="RemoteConsumer_${CURRENT_SERVICE_NUM}_${CURRENT_CAR_NUM}"
   R_CONSUMER_COMMAND="$R_CLIENT_ROOT/script/run-on-bg.sh --id $R_CONSUMER_ID \
       --out-dir $R_CLIENT_OUT --temp-dir $R_CLIENT_TEMP \
-      --exec-path $R_CONSUMER_EXEC --broker $BROKER --prefix \"\" \
-      --client_cnt -1 --running_time -1 \
-      --outdir $R_CLIENT_OUT --verbose $VERBOSE"
+      --exec-path $R_CONSUMER_EXEC -- \
+          --broker $BROKER --group_prefix 'r_' \
+          --client_cnt -1 --running_time 1000000000 \
+          --outdir $R_CLIENT_OUT --verbose"
   if [ $R_CLIENT_HOST == "" ]; then
     $R_CONSUMER_COMMAND
   else 
@@ -371,9 +372,10 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
   CONSUMER_ID="Consumer_${CURRENT_SERVICE_NUM}_${CURRENT_CAR_NUM}"
   $CLIENT_ROOT/script/run-on-bg.sh --id $CONSUMER_ID \
       --out-dir $CLIENT_OUT --temp-dir $CLIENT_TEMP \
-      $CONSUMER_EXEC --exec-path --broker $BROKER --prefix "" \
-      --client_cnt $CURRENT_CAR_NUM --running_time -1 \
-      --outdir $CLIENT_OUT --verbose $VERBOSE
+      --exec-path $CONSUMER_EXEC -- \
+          --broker $BROKER \
+          --client_cnt $CURRENT_CAR_NUM --running_time 1000000000 \
+          --outdir $CLIENT_OUT --verbose
   
   echo "[5/7] Consumer Groups 연결 확인"
   $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $BROKER --prefix "group-" --count $CURRENT_CAR_NUM

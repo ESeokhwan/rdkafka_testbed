@@ -73,6 +73,8 @@ void interrupt_handler(int signum) {
 void parse_arguments(int argc, char** argv, Arguments& args) {
     int opt;
 
+    args.group_prefix="";
+    args.topic_prefix="";
     args.scrapable = false;
     args.read_tagged_only = false;
     args.verbose = false;

@@ -241,6 +241,8 @@ Arguments parse_arguments(int argc, char** argv) {
     int opt;
     Arguments args;
 
+    args.client_prefix = "";
+    args.topic_prefix = "";
     args.client_cnt = 1;
     args.running_time = 10;
     args.interval_noise_stddev_rate = 0.0;

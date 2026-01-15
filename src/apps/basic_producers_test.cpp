@@ -314,6 +314,7 @@ Arguments parse_arguments(int argc, char** argv) {
     int opt;
     Arguments args;
 
+    args.prefix = "";
     args.client_cnt = 1;
     args.topic_cnt_per_client = 1;
     args.msg_cnt_per_topic = 1;
