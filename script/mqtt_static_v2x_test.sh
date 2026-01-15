@@ -49,7 +49,8 @@ TEMP=$(getopt -o d:vh --longoptions \
     "config:, verbose, help, kafka-broker:, mqtt-broker:, common-script-root:, \
     connect-host:, connect-root:, connect-out:, connect-temp:, connect-exec:, \
     r-client-host:, r-client-root:, r-client-out:, r-client-temp:, r-consumer-exec:, \
-    client-root:, client-out:, client-temp:, consumer-exec:, producer-exec:, duration:" \
+    client-root:, client-out:, client-temp:, consumer-exec:, producer-exec:, duration:, \
+    num-car:" \
     -n 'myscript' -- "$@" \
 )
 
@@ -76,6 +77,7 @@ CL_CLIENT_TEMP=""
 CL_CONSUMER_EXEC=""
 CL_PRODUCER_EXEC=""
 CL_DURATION=""
+CL_NUM_CAR=()
 CL_VERBOSE=""
 
 # Process arguments and store them in temporary variables
@@ -101,6 +103,7 @@ while true ; do
         --consumer-exec) CL_CONSUMER_EXEC="$2" ; shift 2 ;;
         --producer-exec) CL_PRODUCER_EXEC="$2" ; shift 2 ;;
         -d|--duration) CL_DURATION="$2" ; shift 2 ;;
+        --num-car) IFS=',' read -r -a CL_NUM_CAR <<< "$2" ; shift 2 ;;
         -v|--verbose) CL_VERBOSE=1 ; shift ;;
         -h|--help) HELP=1 ; shift ;;
         --) shift ; break ;;
@@ -135,6 +138,7 @@ if [ "$HELP" -eq 1 ]; then
     echo "      --consumer-exec <path>        Executable path for Local Consumer. (Default: {client_root}/bin/vehicle)"
     echo "      --producer-exec <path>        Executable path for Producer. (Default: {client_root}/bin/producer)"
     echo "  -d, --duration <seconds>          Duration for the test run. (Default: 100)"
+    echo "      --num-car <num1,num2,...>     Comma-separated list of car counts for the test. (Default: (10))"
     echo "  -v, --verbose                     Enable verbose output. (Config key: VERBOSE=1)"
     echo "  -h, --help                        Display this help message and exit."
     echo ""
@@ -212,6 +216,9 @@ if [ -n "$CL_CONSUMER_EXEC" ]; then
 fi
 if [ -n "$CL_PRODUCER_EXEC" ]; then
     PRODUCER_EXEC="$CL_PRODUCER_EXEC"
+fi
+if [ ${#CL_NUM_CAR[@]} -gt 0 ]; then
+    NUM_CAR=("${CL_NUM_CAR[@]}")
 fi
 if [ -n "$CL_DURATION" ]; then
     DURATION="$CL_DURATION"
