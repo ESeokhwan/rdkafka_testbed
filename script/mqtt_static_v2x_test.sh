@@ -351,7 +351,8 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
   fi
 
   echo "[2/7] Consumer Groups 삭제"
-  $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $BROKER --prefix "group-" --count $CURRENT_CAR_NUM
+  $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $BROKER --prefix "group_" --count $CURRENT_CAR_NUM
+  $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $BROKER --prefix "r_group_" --count 4
   echo "[INFO] 모든 Consumer Groups 삭제 완료"
 
   echo "[3/7] Remote(11) Consumer 실행 (SIGTERM-safe)"
@@ -378,14 +379,15 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
           --outdir $CLIENT_OUT --verbose
   
   echo "[5/7] Consumer Groups 연결 확인"
-  $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $BROKER --prefix "group-" --count $CURRENT_CAR_NUM
+  $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $BROKER --prefix "group_" --count $CURRENT_CAR_NUM
+  $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $BROKER --prefix "r_group_" --count 4
 
   echo "[6/7] Producer 실행"
   $PRODUCER_EXEC --broker $BROKER --client_cnt $CURRENT_CAR_NUM \
-      --running_time $DURATION --verbose $VERBOSE
+      --running_time $DURATION --verbose
   echo "[INFO] Producer 종료됨."
 
-  GAURD_TIME=15
+  GAURD_TIME=10
   echo "${GAURD_TIME}초 대기 후 다음 작업 실행..."
   sleep $GAURD_TIME
 
@@ -394,7 +396,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
   clean_up_r_consumer $R_CONSUMER_ID
   clean_up_connect $CONNECT_ID
 
-  GAURD_TIME=5
+  GAURD_TIME=30
   echo "${GAURD_TIME}초 대기 후 다음 작업 실행..."
   sleep $GAURD_TIME
 
@@ -412,9 +414,6 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
 
   echo "[INFO] ✅ 결과 저장됨: $RESULT_FILE"
   echo "-------------------------------------"
-
-  echo "[INFO] 5초 대기 후 다음 작업 실행..."
-  sleep 5
 done
 
 echo "==================================================="
