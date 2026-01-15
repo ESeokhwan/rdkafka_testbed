@@ -56,10 +56,10 @@ bool StatSumPerSecMonitorLogWriteStrategy::commit() {
             << " AvgGap=" << std::fixed << std::setprecision(2) << stat.avg_latency << "ms"
             << " P90=" << stat.p90_latency << "ms"
             << " P99=" << stat.p99_latency << "ms"
-            << " Reliability=" << std::fixed << std::setprecision(2) << stat.reliability << "%"
+            << " Reliability=" << std::fixed << std::setprecision(2) << (stat.reliability * 100.0) << "%"
             << std::endl;
 
-        *service.per_sec_ostream << "SecondEpoch,Total,Rel(%),AvgLatency,P90Latency,P99Latency\n";
+        *service.per_sec_ostream << "SecondEpoch,Total,Rel,AvgLatency,P90Latency,P99Latency\n";
         std::map<int64_t, std::vector<ProcessedLog>> logs_map_by_sec = devide_logs_by_epoch_sec(processed_logs);
         for (const auto& [sec_epoch, logs]: logs_map_by_sec) {
             Statistics stat = calc_statistics(logs, service.threshold);
@@ -76,7 +76,7 @@ std::ostream& print_latency_log(std::ostream &ostream, const ProcessedLog &log) 
 }
 
 std::ostream& print_stat_log(std::ostream &ostream, const Statistics &log) {
-    return ostream << log.record_cnt<< log.reliability << "," << log.avg_latency 
+    return ostream << log.record_cnt << "," << log.reliability << "," << log.avg_latency
         << "," << log.p90_latency << "," << log.p99_latency << "\n";
 }
 
