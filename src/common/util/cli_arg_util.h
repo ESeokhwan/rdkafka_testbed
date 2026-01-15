@@ -34,6 +34,9 @@ enum class LongOnlyOptionVals {
     MONITORING_BATCH_SIZE,
     SERVICE_RUNNER_POOL_SIZE,
     SHARE_PRODUCER,
+    GROUP_PREFIX,
+    CLIENT_PREFIX,
+    TOPIC_PREFIX
 };
 
 }
@@ -91,6 +94,12 @@ constexpr OptionWrapper VERBOSE_OPTION = {"verbose", no_argument, nullptr, 'v', 
 constexpr OptionWrapper BROKER_OPTION = {"broker", required_argument, nullptr, 'b', "Broker address"};
 
 constexpr OptionWrapper PREFIX_OPTION = {"prefix", required_argument, nullptr, 'p', "Prefix for topic, client, and etc."};
+
+constexpr OptionWrapper GROUP_PREFIX_OPTION = {"group_prefix", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::GROUP_PREFIX), "Prefix for group id"};
+
+constexpr OptionWrapper CLIENT_PREFIX_OPTION = {"client_prefix", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::CLIENT_PREFIX), "Prefix for client id"};
+
+constexpr OptionWrapper TOPIC_PREFIX_OPTION = {"topic_prefix", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::TOPIC_PREFIX), "Prefix for topic"};
 
 constexpr OptionWrapper ROUND_CNT_OPTION = {"round_cnt", required_argument, nullptr, 'n', "Number of rounds of each producer and service"};
 constexpr OptionWrapper MSG_CNT_PER_TOPIC_OPTION = {"msg_cnt_per_topic", required_argument, nullptr, 'n', "Number of messages per topic"};

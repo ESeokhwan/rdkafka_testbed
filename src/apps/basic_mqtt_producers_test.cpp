@@ -165,14 +165,14 @@ void BasicMqttProducersTest::init_sharing_prod_services() {
     for (int i = 0; i < args.client_cnt; i++) {
         vector<shared_ptr<IService>> services;
         mosquitto *mosq_client = producer::MosqProducerService::create_mosq_client(
-            args.broker, args.prefix + "_" + to_string(i));
+            args.broker, args.prefix + to_string(i));
         shared_clients.push_back(mosq_client);
 
         for (int j = 0; j < args.topic_cnt_per_client; j++) {
             shared_ptr<IService> service = make_shared<producer::MosqProducerService>(
                 mosq_client,
-                args.prefix + "_" + to_string(i) + "_" + to_string(j),
-                args.prefix + "_" + to_string(i) + "_" + to_string(j),
+                args.prefix + to_string(i) + "_" + to_string(j),
+                args.prefix + to_string(i) + "_" + to_string(j),
                 args.msg_cnt_per_topic,
                 args.interval,
                 args.interval_noise_stddev,
@@ -217,9 +217,9 @@ void BasicMqttProducersTest::init_standalone_services() {
         for (int j = 0; j < args.topic_cnt_per_client; j++) {
             shared_ptr<IService> service = make_shared<producer::MosqProducerService>(
                 args.broker,
-                args.prefix + "_" + to_string(i),
-                args.prefix + "_" + to_string(i) + "_" + to_string(j),
-                args.prefix + "_" + to_string(i) + "_" + to_string(j),
+                args.prefix + to_string(i),
+                args.prefix + to_string(i) + "_" + to_string(j),
+                args.prefix + to_string(i) + "_" + to_string(j),
                 args.msg_cnt_per_topic,
                 args.interval,
                 args.interval_noise_stddev,
@@ -235,7 +235,7 @@ void BasicMqttProducersTest::init_standalone_services() {
         }
         shared_ptr<IService> warmup_service = make_shared<producer::MosqProducerService>(
             args.broker,
-            "warmup_" + to_string(i),
+            args.prefix + "warmup_" + to_string(i),
             "warmup",
             args.warmup_topic,
             args.warmup_cnt,

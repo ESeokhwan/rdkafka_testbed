@@ -30,7 +30,8 @@ using namespace common;
 struct Arguments {
     string broker;
 
-    string prefix;
+    string client_prefix;
+    string topic_prefix;
     int client_cnt;
     int running_time;
 
@@ -109,7 +110,8 @@ int main(int argc, char *argv[]) {
     cout
         << "client start\n"
         << "Broker: " << args.broker << "\n"
-        << "Prefix: " << args.prefix << "\n"
+        << "Client Prefix: " << args.client_prefix << "\n"
+        << "Topic Prefix: " << args.topic_prefix << "\n"
         << "Client Count: " << args.client_cnt << "\n"
         << "Running Time: " << args.running_time << "\n"
         << "Interval Noise Stddev Rate: " << args.interval_noise_stddev_rate << "\n"
@@ -148,11 +150,15 @@ void V2xMqttExprProducerApp::init_clients() {
     for (int i = 0; i < args.client_cnt; i++) {
         vector<shared_ptr<IService>> services;
         mosquitto *mosq_client = producer::MosqProducerService::create_mosq_client(
-            args.broker, args.prefix + "_" + to_string(i));
+            args.broker, args.client_prefix + to_string(i));
         mosq_clients.push_back(mosq_client);
 
         for (const auto &service_info: service_infos) {
-            services.push_back(make_service(mosq_client, service_info.service_name, service_info.service_name + "/Car" + to_string(i), service_info.interval, service_info.msg_size));
+            services.push_back(make_service(
+                mosq_client, service_info.service_name,
+                args.topic_prefix + service_info.service_name + "/Car" + to_string(i), 
+                service_info.interval, service_info.msg_size
+            ));
         }
         auto warmup_service = make_warmup_service(mosq_client);
 
@@ -248,7 +254,8 @@ Arguments parse_arguments(int argc, char** argv) {
     static vector<util::OptionWrapper> options = {
         util::HELP_OPTION,
         util::BROKER_OPTION,
-        util::PREFIX_OPTION,
+        util::CLIENT_PREFIX_OPTION,
+        util::TOPIC_PREFIX_OPTION,
         util::CLIENT_CNT_OPTION,
         util::RUNNING_TIME_OPTION,
         util::INTERVAL_NOISE_STDDEV_RATE_OPTION,
@@ -267,7 +274,8 @@ Arguments parse_arguments(int argc, char** argv) {
         switch (opt) {
             case util::HELP_OPTION.get_val(): cout << make_help_message(options) << endl; exit(EXIT_SUCCESS); break;
             case util::BROKER_OPTION.get_val(): args.broker = optarg; break;
-            case util::PREFIX_OPTION.get_val(): args.prefix = optarg; break;
+            case util::CLIENT_PREFIX_OPTION.get_val(): args.client_prefix = optarg; break;
+            case util::TOPIC_PREFIX_OPTION.get_val(): args.topic_prefix = optarg; break;
             case util::CLIENT_CNT_OPTION.get_val(): args.client_cnt = atoi(optarg); break;
             case util::RUNNING_TIME_OPTION.get_val(): args.running_time = atoi(optarg); break;
             case util::INTERVAL_NOISE_STDDEV_RATE_OPTION.get_val(): args.interval_noise_stddev_rate = atof(optarg); break;

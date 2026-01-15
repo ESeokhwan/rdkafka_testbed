@@ -25,7 +25,8 @@ using namespace common;
 struct Arguments {
     string broker;
 
-    string prefix;
+    string group_prefix;
+    string topic_prefix;
     int client_cnt;
     int running_time;
 
@@ -78,7 +79,8 @@ void parse_arguments(int argc, char** argv, Arguments& args) {
     static vector<util::OptionWrapper> options = {
         util::HELP_OPTION,
         util::BROKER_OPTION,
-        util::PREFIX_OPTION,
+        util::GROUP_PREFIX_OPTION,
+        util::TOPIC_PREFIX_OPTION,
         util::CLIENT_CNT_OPTION,
         util::RUNNING_TIME_OPTION,
         util::SCRAPABLE_OPTION,
@@ -93,7 +95,8 @@ void parse_arguments(int argc, char** argv, Arguments& args) {
         switch (opt) {
             case util::HELP_OPTION.get_val(): cout << make_help_message(options) << endl; exit(EXIT_SUCCESS); break;
             case util::BROKER_OPTION.get_val(): args.broker = optarg; break;
-            case util::PREFIX_OPTION.get_val(): args.prefix = optarg; break;
+            case util::GROUP_PREFIX_OPTION.get_val(): args.group_prefix = optarg; break;
+            case util::TOPIC_PREFIX_OPTION.get_val(): args.topic_prefix = optarg; break;
             case util::CLIENT_CNT_OPTION.get_val(): args.client_cnt = atoi(optarg); break;
             case util::RUNNING_TIME_OPTION.get_val(): args.running_time = atoi(optarg); break;
             case util::SCRAPABLE_OPTION.get_val(): args.scrapable = true; break;
@@ -149,7 +152,8 @@ int main(int argc, char *argv[]) {
     cout
         << "client start\n"
         << "Broker: " << args.broker << "\n"
-        << "Prefix: " << args.prefix << "\n"
+        << "Group Prefix: " << args.group_prefix << "\n"
+        << "Topic Prefix: " << args.topic_prefix << "\n"
         << "Client Count: " << args.client_cnt << "\n"
         << "Running Time: " << args.running_time << "\n"
         << "Scrapable: " << (args.scrapable ? "on" : "off") << "\n"
@@ -199,8 +203,8 @@ int main(int argc, char *argv[]) {
 
     for (int i = 0; i < client_cnt; i++) {
         consumer_thread_args[i].broker = args.broker;
-        consumer_thread_args[i].group_id = args.prefix + "group_" + to_string(i);
-        consumer_thread_args[i].topics.push_back(args.prefix + services[assigned_idx[i]].name);
+        consumer_thread_args[i].group_id = args.group_prefix + "group_" + to_string(i);
+        consumer_thread_args[i].topics.push_back(args.topic_prefix + services[assigned_idx[i]].name);
         consumer_thread_args[i].verbose = args.verbose;
         consumer_thread_args[i].read_tagged_only = args.read_tagged_only;
         consumer_thread_args[i].monitor_queue = monitor_queue;
