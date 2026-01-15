@@ -70,6 +70,7 @@ private:
     Arguments args;
     vector<struct ServiceArg> service_args;
 
+    vector<ConsumerThreadArg> consumer_thread_args;
     vector<thread> client_threads;
 
     mutex m;
@@ -161,14 +162,16 @@ void V2xExprConsumerApp::init_clients() {
     int client_cnt = args.client_cnt;
     if (client_cnt < 0) client_cnt = service_args.size();
 
-    vector<struct ConsumerThreadArg> consumer_thread_args(client_cnt);
-    vector<thread> consumer_threads;
-
+    consumer_thread_args.resize(client_cnt);
+    client_threads.reserve(client_cnt);
     vector<int> assigned_idx = assign_services(client_cnt, service_args.size());
     for (int i = 0; i < client_cnt; i++) {
         consumer_thread_args[i].broker = args.broker;
         consumer_thread_args[i].group_id = args.group_prefix + to_string(i);
+        consumer_thread_args[i].client_id = args.topic_prefix + service_args[assigned_idx[i]].name + "_" + to_string(i);
         consumer_thread_args[i].topics.push_back(args.topic_prefix + service_args[assigned_idx[i]].name);
+        consumer_thread_args[i].start_signal = &start_signal;
+        consumer_thread_args[i].end_flag = &end_flag;
         consumer_thread_args[i].verbose = args.verbose;
         consumer_thread_args[i].read_tagged_only = args.read_tagged_only;
         consumer_thread_args[i].monitor_queue = monitor_queue;
