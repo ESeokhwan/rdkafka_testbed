@@ -184,7 +184,7 @@ shared_ptr<IService> V2xMqttExprProducerApp::make_service(mosquitto *mosq_client
         interval * args.interval_noise_stddev_rate,
         interval / 2,
         rng,
-        true,
+        false,
         false,
         adaptor,
         monitor_queue,
