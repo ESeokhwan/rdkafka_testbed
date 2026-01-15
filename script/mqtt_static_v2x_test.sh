@@ -36,12 +36,10 @@ CONSUMER_EXEC=""
 PRODUCER_EXEC=""
 
 DURATION=100
-SERVICE_NUM=1
 
 # NUM_CAR=(10 10 20 40 60 80 100 120 130 140 150)
 NUM_CAR=(10)
 
-RESULT_FILE="Final_Result.txt"
 VERBOSE=0
 HELP=0
 CONFIG_FILE=""
@@ -51,7 +49,7 @@ TEMP=$(getopt -o d:vh --longoptions \
   "config:, verbose, help, kafka-broker:, mqtt-broker:, common-script-root:, \
   connect-host:, connect-root:, connect-out:, connect-temp:, connect-exec:, \
   r-client-host:, r-client-root:, r-client-out:, r-client-temp:, r-consumer-exec:, \
-  client-root:, client-out:, client-temp:, consumer-exec:, producer-exec:, duration:, service-num:" \
+  client-root:, client-out:, client-temp:, consumer-exec:, producer-exec:, duration:" \
   -n 'myscript' -- "$@" \
 )
 
@@ -78,7 +76,6 @@ CL_CLIENT_TEMP=""
 CL_CONSUMER_EXEC=""
 CL_PRODUCER_EXEC=""
 CL_DURATION=""
-CL_SERVICE_NUM=""
 CL_VERBOSE=""
 
 # Process arguments and store them in temporary variables
@@ -104,7 +101,6 @@ while true ; do
         --consumer-exec) CL_CONSUMER_EXEC="$2" ; shift 2 ;;
         --producer-exec) CL_PRODUCER_EXEC="$2" ; shift 2 ;;
         -d|--duration) CL_DURATION="$2" ; shift 2 ;;
-        --service-num) CL_SERVICE_NUM="$2" ; shift 2 ;;
         -v|--verbose) CL_VERBOSE=1 ; shift ;;
         -h|--help) HELP=1 ; shift ;;
         --) shift ; break ;;
@@ -139,7 +135,6 @@ if [ "$HELP" -eq 1 ]; then
     echo "      --consumer-exec <path>        Executable path for Local Consumer. (Default: {client_root}/bin/vehicle)"
     echo "      --producer-exec <path>        Executable path for Producer. (Default: {client_root}/bin/producer)"
     echo "  -d, --duration <seconds>          Duration for the test run. (Default: 100)"
-    echo "      --service-num <number>        Service number identifier for the test. (Default: 8)"
     echo "  -v, --verbose                     Enable verbose output. (Config key: VERBOSE=1)"
     echo "  -h, --help                        Display this help message and exit."
     echo ""
@@ -221,9 +216,6 @@ fi
 if [ -n "$CL_DURATION" ]; then
     DURATION="$CL_DURATION"
 fi
-if [ -n "$CL_SERVICE_NUM" ]; then
-    SERVICE_NUM="$CL_SERVICE_NUM"
-fi
 if [ -n "$CL_VERBOSE" ]; then
     VERBOSE="$CL_VERBOSE"
 fi
@@ -282,7 +274,6 @@ if [ "$VERBOSE" -eq 1 ]; then
     echo "Consumer Exec:          $CONSUMER_EXEC"
     echo "Producer Exec:          $PRODUCER_EXEC"
     echo "Duration:               $DURATION"
-    echo "Service Num:            $SERVICE_NUM"
     echo "Verbose Mode:           $VERBOSE"
     echo "--------------------------"
 
@@ -321,7 +312,6 @@ clean_up_r_consumer() {
 # trap handler
 trap_handler() {
   echo "[TRAP] Ctrl+C 감지! 정리 중..."
-  echo "[TRAP] 현재 SERVICE_NUM: $CURRENT_SERVICE_NUM"
 
   sleep 10
   clean_up_consumer $CONSUMER_ID
@@ -337,18 +327,17 @@ echo "🚀 start test script"
 echo "==============================================="
 
 for CAR_NUM in "${NUM_CAR[@]}"; do
-  CURRENT_SERVICE_NUM=$SERVICE_NUM
   CURRENT_CAR_NUM=$CAR_NUM
 
   echo "==================================================="
-  echo "[INFO] 실험 시작: SERVICE_NUM=$CURRENT_SERVICE_NUM, NUM_CAR=$CURRENT_CAR_NUM"
+  echo "[INFO] 실험 시작: NUM_CAR=$CURRENT_CAR_NUM"
   echo "==================================================="
 
   echo "[1/7] 원격 Connect 실행 (setsid + pgrep)"
-  CONNECT_ID="Connect_${CURRENT_SERVICE_NUM}"
+  CONNECT_ID="Connect_${CURRENT_CAR_NUM}"
   CONNECT_COMMAND="$CONNECT_ROOT/script/run-on-bg.sh --id $CONNECT_ID \
       --out-dir $CONNECT_OUT --temp-dir $CONNECT_TEMP \
-      --exec-path $CONNECT_EXEC $CURRENT_SERVICE_NUM"
+      --exec-path $CONNECT_EXEC 1"
   if [ $CONNECT_HOST == "" ]; then
     $CONNECT_COMMAND
   else 
@@ -361,7 +350,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
   echo "[INFO] 모든 Consumer Groups 삭제 완료"
 
   echo "[3/7] Remote(11) Consumer 실행 (SIGTERM-safe)"
-  R_CONSUMER_ID="RemoteConsumer_${CURRENT_SERVICE_NUM}_${CURRENT_CAR_NUM}"
+  R_CONSUMER_ID="RemoteConsumer_${CURRENT_CAR_NUM}"
   R_CONSUMER_COMMAND="$R_CLIENT_ROOT/script/run-on-bg.sh --id $R_CONSUMER_ID \
       --out-dir $R_CLIENT_OUT --temp-dir $R_CLIENT_TEMP \
       --exec-path $R_CONSUMER_EXEC -- \
@@ -375,7 +364,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
   fi
 
   echo "[4/7] Local(101) Consumer 실행 (SIGTERM-safe)"
-  CONSUMER_ID="Consumer_${CURRENT_SERVICE_NUM}_${CURRENT_CAR_NUM}"
+  CONSUMER_ID="Consumer_${CURRENT_CAR_NUM}"
   $CLIENT_ROOT/script/run-on-bg.sh --id $CONSUMER_ID \
       --out-dir $CLIENT_OUT --temp-dir $CLIENT_TEMP \
       --exec-path $CONSUMER_EXEC -- \
@@ -415,16 +404,14 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
   {
     echo ""
     echo "==================================================="
-    echo "[RESULT] SERVICE_NUM = $SERVICE_NUM, NUM_CAR = $CURRENT_CAR_NUM"
+    echo "[RESULT] NUM_CAR = $CURRENT_CAR_NUM"
     echo "[RESULT] TIMESTAMP   = $TIMESTAMP"
     echo "==================================================="
     ssh $R_CLIENT_HOST "cat $R_CLIENT_OUT/$R_CONSUMER_ID.log"
-  } | tee -a "$RESULT_FILE"
-
-  echo "[INFO] ✅ 결과 저장됨: $RESULT_FILE"
+  }
   echo "-------------------------------------"
 done
 
 echo "==================================================="
-echo "✅ 모든 실험 완료! Final_Result.txt 확인"
+echo "✅ 모든 실험 완료!"
 echo "==================================================="
