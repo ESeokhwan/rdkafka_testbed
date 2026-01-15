@@ -6,7 +6,8 @@
 # 3. Default values in this script (lowest)
 
 # --- Default values for options ---
-BROKER="127.0.0.1:9092"
+KAFKA_BROKER="127.0.0.1:9092"
+MQTT_BROKER="127.0.0.1:1883"
 
 COMMON_SCRIPT_ROOT="."
 
@@ -46,8 +47,8 @@ HELP=0
 CONFIG_FILE=""
 
 # --- Argument Parsing ---
-TEMP=$(getopt -o b:d:vh --longoptions \
-  "config:, verbose, help, broker:, common-script-root:, \
+TEMP=$(getopt -o d:vh --longoptions \
+  "config:, verbose, help, kafka-broker:, mqtt-broker:, common-script-root:, \
   connect-host:, connect-root:, connect-out:, connect-temp:, connect-exec:, \
   r-client-host:, r-client-root:, r-client-out:, r-client-temp:, r-consumer-exec:, \
   client-root:, client-out:, client-temp:, consumer-exec:, producer-exec:, duration:, service-num:" \
@@ -58,7 +59,8 @@ if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
 eval set -- "$TEMP"
 
 # Temporary variables to store command-line arguments
-CL_BROKER=""
+CL_KAFKA_BROKER=""
+CL_MQTT_BROKER=""
 CL_COMMON_SCRIPT_ROOT=""
 CL_CONNECT_HOST=""
 CL_CONNECT_ROOT=""
@@ -83,7 +85,8 @@ CL_VERBOSE=""
 while true ; do
     case "$1" in
         --config) CONFIG_FILE="$2" ; shift 2 ;;
-        -b|--broker) CL_BROKER="$2" ; shift 2;;
+        --kafka-broker) CL_KAFKA_BROKER="$2" ; shift 2;;
+        --mqtt-broker) CL_MQTT_BROKER="$2" ; shift 2 ;;
         --common-script-root) CL_COMMON_SCRIPT_ROOT="$2" ; shift 2 ;;
         --connect-host) CL_CONNECT_HOST="$2" ; shift 2 ;;
         --connect-root) CL_CONNECT_ROOT="$2" ; shift 2 ;;
@@ -117,7 +120,8 @@ if [ "$HELP" -eq 1 ]; then
     echo ""
     echo "Options:"
     echo "      --config <path>               Path to a configuration file. (e.g., key=\"value\" pairs)"
-    echo "  -b, --broker <host:port>          Kafka broker address. (Default: 127.0.0.1:9092)"
+    echo "      --broker <host:port>          Kafka broker address. (Default: 127.0.0.1:9092)"
+    echo "      --mqtt-broker <host:port>     MQTT broker address. (Default: 127.0.0.1:1883)"
     echo "      --common-script-root <path>   Root directory where common script are located. (Default: .)"
     echo "      --connect-host <user@host>    Remote host for Connect execution. (Default: empty string for local)"
     echo "      --connect-root <path>         Root directory on remote host where Connect is located. (Default: ./connect)"
@@ -160,8 +164,11 @@ fi
 
 # --- Apply command-line arguments to override config/defaults ---
 # If the temporary variable is not empty, it means it was set on the command line.
-if [ -n "$CL_BROKER" ]; then
-    BROKER="$CL_BROKER"
+if [ -n "$CL_KAFKA_BROKER" ]; then
+    KAFKA_BROKER="$CL_KAFKA_BROKER"
+fi
+if [ -n "$CL_MQTT_BROKER" ]; then
+    MQTT_BROKER="$CL_MQTT_BROKER"
 fi
 if [ -n "$CL_COMMON_SCRIPT_ROOT" ]; then
     COMMON_SCRIPT_ROOT="$CL_COMMON_SCRIPT_ROOT"
@@ -256,7 +263,8 @@ fi
 # --- Script Logic ---
 if [ "$VERBOSE" -eq 1 ]; then
     echo "--- Script Configuration ---"
-    echo "Broker:                 $BROKER"
+    echo "Kafka Broker:           $KAFKA_BROKER"
+    echo "MQTT Broker:            $MQTT_BROKER"
     echo "Common Script Root:     $COMMON_SCRIPT_ROOT"
     echo "Connect Host:           $CONNECT_HOST"
     echo "Connect Root:           $CONNECT_ROOT"
@@ -351,8 +359,8 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
   fi
 
   echo "[2/7] Consumer Groups 삭제"
-  $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $BROKER --prefix "group_" --count $CURRENT_CAR_NUM
-  $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $BROKER --prefix "r_group_" --count 4
+  $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "group_" --count $CURRENT_CAR_NUM
+  $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --count 4
   echo "[INFO] 모든 Consumer Groups 삭제 완료"
 
   echo "[3/7] Remote(11) Consumer 실행 (SIGTERM-safe)"
@@ -360,7 +368,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
   R_CONSUMER_COMMAND="$R_CLIENT_ROOT/script/run-on-bg.sh --id $R_CONSUMER_ID \
       --out-dir $R_CLIENT_OUT --temp-dir $R_CLIENT_TEMP \
       --exec-path $R_CONSUMER_EXEC -- \
-          --broker $BROKER --group_prefix 'r_' \
+          --broker $KAFKA_BROKER --group_prefix 'r_' \
           --client_cnt -1 --running_time 1000000000 \
           --outdir $R_CLIENT_OUT --verbose"
   if [ $R_CLIENT_HOST == "" ]; then
@@ -374,16 +382,16 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
   $CLIENT_ROOT/script/run-on-bg.sh --id $CONSUMER_ID \
       --out-dir $CLIENT_OUT --temp-dir $CLIENT_TEMP \
       --exec-path $CONSUMER_EXEC -- \
-          --broker $BROKER \
+          --broker $KAFKA_BROKER \
           --client_cnt $CURRENT_CAR_NUM --running_time 1000000000 \
           --outdir $CLIENT_OUT --verbose
   
   echo "[5/7] Consumer Groups 연결 확인"
-  $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $BROKER --prefix "group_" --count $CURRENT_CAR_NUM
-  $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $BROKER --prefix "r_group_" --count 4
+  $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "group_" --count $CURRENT_CAR_NUM
+  $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --count 4
 
   echo "[6/7] Producer 실행"
-  $PRODUCER_EXEC --broker $BROKER --client_cnt $CURRENT_CAR_NUM \
+  $PRODUCER_EXEC --broker $MQTT_BROKER --client_cnt $CURRENT_CAR_NUM \
       --running_time $DURATION --verbose
   echo "[INFO] Producer 종료됨."
 
