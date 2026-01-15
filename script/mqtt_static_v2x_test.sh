@@ -364,7 +364,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
     R_CONSUMER_COMMAND="$R_CLIENT_ROOT/script/run-on-bg.sh --id $R_CONSUMER_ID \
         --out-dir $R_CLIENT_OUT --temp-dir $R_CLIENT_TEMP $VERBOSE_TAG \
         --exec-path $R_CONSUMER_EXEC -- \
-            --broker $KAFKA_BROKER --group_prefix 'r_' \
+            --broker $KAFKA_BROKER --group_prefix 'r_group_' \
             --client_cnt -1 --running_time $INF_DURATION_MS \
             --outdir $R_CLIENT_OUT $VERBOSE_TAG"
     if [ $R_CLIENT_HOST == "" ]; then
@@ -380,7 +380,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
     $CLIENT_ROOT/script/run-on-bg.sh --id $CONSUMER_ID \
         --out-dir $CLIENT_OUT --temp-dir $CLIENT_TEMP $VERBOSE_TAG \
         --exec-path $CONSUMER_EXEC -- \
-            --broker $KAFKA_BROKER \
+            --broker $KAFKA_BROKER --group_prefix 'group_' \
             --client_cnt $CURRENT_CAR_NUM --running_time $INF_DURATION_MS \
             --outdir $CLIENT_OUT $VERBOSE_TAG
     echo "--------------------------------------------------"
