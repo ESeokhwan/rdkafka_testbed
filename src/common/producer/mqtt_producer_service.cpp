@@ -3,6 +3,7 @@
 #include "util/noise_util.h"
 #include "util/time_util.h"
 
+#include <chrono>
 #include <mosquitto.h>
 #include <stdexcept>
 
@@ -10,12 +11,12 @@ namespace {
     bool mosq_flush(mosquitto *mosq_client, int timeout_ms) {
         if (!mosq_client) return false;
 
-        auto start_time = std::chrono::steady_clock::now();
-        auto timeout_duration = std::chrono::milliseconds(timeout_ms);
+        int64_t start_time_ns = common::util::get_current_timestamp_nano();
+        int64_t timeout_ns = timeout_ms * 1000 * 1000;
 
         while (mosquitto_want_write(mosq_client)) {
-            auto current_time = std::chrono::steady_clock::now();
-            if ((current_time - start_time) > timeout_duration) return false;
+            int64_t current_time_ns = common::util::get_current_timestamp_nano();
+            if ((current_time_ns - start_time_ns) > timeout_ns) return false;
 
             int rc = mosquitto_loop(mosq_client, 0, 1);
             if (rc != MOSQ_ERR_SUCCESS) {
@@ -90,7 +91,7 @@ void MosqProducerService::work() {
     std::string core_msg = topic_name + "_" + std::to_string(idx);
     if (msg_tagged && log_enabled) core_msg = "R" + core_msg;
 
-    double requested_at = double(util::get_current_timestamp_nano()) / (1000.0 * 1000.0);
+    double requested_at = double(util::get_current_timestamp());
     std::string msg = this->adaptor->generate(core_msg, requested_at, service_name);
     if (log_enabled) {
         monitor_queue->enqueue(std::make_unique<moniq::MonitorLog>(
