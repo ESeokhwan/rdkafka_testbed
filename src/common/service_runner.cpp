@@ -1,5 +1,6 @@
 #include "service_runner.h"
 #include <chrono>
+#include <stdexcept>
 
 namespace {
 
@@ -42,20 +43,26 @@ ServicesRunner::ServicesRunner(
     }
 }
 
+ServicesRunner::~ServicesRunner() {
+    close();
+}
+
 void ServicesRunner::run() {
+    if (io_thread.joinable()) {
+        close();
+        throw std::runtime_error("Invalid function call. Don't call run() twice.");
+    }
     warmup();
 
     start_signal->wait();
     if (completion_signal->try_wait()) return;
 
     init_first_schedules();
-    std::thread io_thread([this]() { io_context.run(); });
+    io_thread = std::thread([this]() { io_context.run(); });
     start_next_task();
 
     completion_signal->wait();
     close();
-
-    if (io_thread.joinable()) io_thread.join();
 }
 
 void ServicesRunner::close() {
@@ -64,6 +71,7 @@ void ServicesRunner::close() {
     io_context.stop();
     pool.stop();
     pool.join();
+    if (io_thread.joinable()) io_thread.join();
 
     for (auto& svc : services) svc->close();
     while (!completion_signal->try_wait()) {

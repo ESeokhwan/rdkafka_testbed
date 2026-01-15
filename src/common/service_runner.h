@@ -29,6 +29,7 @@ private:
     std::latch *start_signal;
     std::unique_ptr<std::latch> completion_signal;
 
+    std::thread io_thread;
     boost::asio::io_context io_context;
     boost::asio::steady_timer scheduler_timer;
     boost::asio::thread_pool pool;
@@ -50,7 +51,7 @@ public:
                    std::shared_ptr<IService> warmup_svc,
                    double interval, double stddev, double max_noise, 
                    std::mt19937& rng, std::latch *start_sig, int pool_size);
-    virtual ~ServicesRunner() = default;
+    virtual ~ServicesRunner();
 
     void run();
     void close();
