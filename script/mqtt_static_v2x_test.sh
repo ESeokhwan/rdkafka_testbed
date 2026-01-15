@@ -326,6 +326,7 @@ echo "------------------------------------------------"
 echo "🚀 start test script"
 echo "------------------------------------------------"
 
+INF_DURATION_MS=$((1000 * 60 * 60 * 10)) # 10 hours
 VERBOSE_TAG=""
 if [ $VERBOSE -eq 1 ]; then
     VERBOSE_TAG="--verbose"
@@ -364,7 +365,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
         --out-dir $R_CLIENT_OUT --temp-dir $R_CLIENT_TEMP $VERBOSE_TAG \
         --exec-path $R_CONSUMER_EXEC -- \
             --broker $KAFKA_BROKER --group_prefix 'r_' \
-            --client_cnt -1 --running_time 1000000000 \
+            --client_cnt -1 --running_time $INF_DURATION_MS \
             --outdir $R_CLIENT_OUT $VERBOSE_TAG"
     if [ $R_CLIENT_HOST == "" ]; then
        $R_CONSUMER_COMMAND
@@ -380,7 +381,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
         --out-dir $CLIENT_OUT --temp-dir $CLIENT_TEMP $VERBOSE_TAG \
         --exec-path $CONSUMER_EXEC -- \
             --broker $KAFKA_BROKER \
-            --client_cnt $CURRENT_CAR_NUM --running_time 1000000000 \
+            --client_cnt $CURRENT_CAR_NUM --running_time $INF_DURATION_MS \
             --outdir $CLIENT_OUT $VERBOSE_TAG
     echo "--------------------------------------------------"
 
@@ -397,8 +398,9 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     echo "[6/7] Producer 실행 ($TIMESTAMP)"
+    DURATION_MS=$((DURATION * 1000))
     $PRODUCER_EXEC --broker $MQTT_BROKER --client_cnt $CURRENT_CAR_NUM \
-        --running_time $DURATION $VERBOSE_TAG
+        --running_time $DURATION_MS $VERBOSE_TAG
     echo "--------------------------------------------------"
 
     GAURD_TIME=5
