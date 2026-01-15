@@ -18,11 +18,7 @@ namespace {
             int64_t current_time_ns = common::util::get_current_timestamp_nano();
             if ((current_time_ns - start_time_ns) > timeout_ns) return false;
 
-            int rc = mosquitto_loop(mosq_client, 0, 1);
-            if (rc != MOSQ_ERR_SUCCESS) {
-                throw std::runtime_error("Error during flush mosquitto: " + std::to_string(rc));
-            }
-
+            mosquitto_loop(mosq_client, 0, 1);
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
         return true;
