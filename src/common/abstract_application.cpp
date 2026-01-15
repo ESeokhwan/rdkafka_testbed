@@ -27,7 +27,7 @@ AbstractApplication::AbstractApplication(
 
 
 void AbstractApplication::start_barrier(int delay) {
-    std::cout << "En Garde...\n";
+    std::cout << "Start threads in " << delay << "ms...\n";
     std::this_thread::sleep_for(std::chrono::milliseconds(delay));
     std::cout << "Allez!\n";
     start_signal.count_down();

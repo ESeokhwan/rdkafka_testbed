@@ -1,3 +1,4 @@
+#include "abstract_application.h"
 #include "libmoniq/writer/write_strategy/monitor_log_write_strategy.h"
 #include "util/cli_arg_util.h"
 #include "util/time_util.h"
@@ -49,6 +50,9 @@ struct ConsumerThreadArg {
     shared_ptr<moniq::MonitorQueue> monitor_queue;
     shared_ptr<moniq::writer::MonitorLogWriter> writer;
 
+    latch *start_signal;
+    atomic<bool> *end_flag;
+
     bool read_tagged_only;
     bool verbose;
 };
@@ -58,22 +62,214 @@ struct ServiceArg {
     double threshold;
 };
 
-vector<int> assign_services(int num_cars, int num_services);
+class V2xExprConsumerApp: public AbstractApplication {
+protected:
+    void cleanup_main() override;
 
-// Global variables
-mutex m;
-condition_variable cv;
-atomic<bool> start_flag(false);
-atomic<bool> end_flag(false);
+private:
+    Arguments args;
+    vector<struct ServiceArg> service_args;
 
-void interrupt_handler(int signum) {
-    cout << "Interrupt signal (" << signum << ") received." << endl;
-    end_flag = true;
+    vector<thread> client_threads;
+
+    mutex m;
+    condition_variable cv;
+    atomic<bool> end_flag;
+
+    void init_clients();
+    void wait_for_running_time();
+    void join_clients();
+
+public:
+    V2xExprConsumerApp(
+        shared_ptr<moniq::MonitorQueue> &monitor_queue,
+        shared_ptr<moniq::writer::MonitorLogWriter> &writer,
+        Arguments args,
+        vector<struct ServiceArg> &service_args
+    ): AbstractApplication(monitor_queue, writer), args(args), service_args(service_args) {
+
+    }
+
+    virtual ~V2xExprConsumerApp() = default;
+
+    void run() override;
+    void send_end_signal_to_threads();
+};
+
+// Define global variables & helper functions
+namespace {
+    V2xExprConsumerApp *app;
+    vector<unique_ptr<ostream>> latency_outs;
+    vector<unique_ptr<ostream>> per_sec_outs;
+
+    vector<monitor::ServiceInfo> generate_services(vector<struct ServiceArg> &service_args, string outdir);
+    Arguments parse_arguments(int argc, char **argv);
+    void interrupt_handler(int signum);
+    vector<int> assign_services(int num_cars, int num_services);
+    void consume_run(struct ConsumerThreadArg *arg);
+}
+
+
+int main(int argc, char *argv[]) {
+    Arguments args = parse_arguments(argc, argv);
+
+    cout << "v2x expr consumer starts at " << util::current_time_str() << endl;
+    if (args.verbose) {
+        cout
+            << "Broker: " << args.broker << "\n"
+            << "Group Prefix: " << args.group_prefix << "\n"
+            << "Topic Prefix: " << args.topic_prefix << "\n"
+            << "Client Count: " << args.client_cnt << "\n"
+            << "Running Time: " << args.running_time << "\n"
+            << "Start Barrier Delay: " << args.start_barrier_delay << "\n"
+            << "Scrapable: " << (args.scrapable ? "on" : "off") << "\n"
+            << "Log Sampling: " << (args.read_tagged_only ? "on" : "off") << "\n"
+            << "Output Directory: " << args.outdir << endl;
+    }
+
+    vector<struct ServiceArg> service_args = {
+        {"S10Hz-Info", 100},
+        {"S10Hz-Sensor", 100},
+        {"S30Hz", 25},
+        {"S50Hz", 20},
+    };
+
+    shared_ptr<moniq::MonitorQueue> monitor_queue = make_shared<moniq::MonitorQueue>();
+    shared_ptr<moniq::writer::IMonitorLogWriteStrategy> write_strategy =
+        make_shared<monitor::StatSumPerSecMonitorLogWriteStrategy>(generate_services(service_args, args.outdir));
+    shared_ptr<moniq::writer::MonitorLogWriter> writer = make_shared<moniq::writer::MonitorLogWriter>(monitor_queue, write_strategy, -1, -1);
+
+    app = new V2xExprConsumerApp(monitor_queue, writer, args, service_args);
+    signal(SIGINT, interrupt_handler);
+    signal(SIGTERM, interrupt_handler);
+    app->run();
+    app->cleanup();
+
+    delete app;
+    return 0;
+}
+
+void V2xExprConsumerApp::run() {
+    init_clients();
+
+    start_barrier(args.start_barrier_delay);
+    wait_for_running_time();
+    join_clients();
+}
+
+void V2xExprConsumerApp::init_clients() {
+    int client_cnt = args.client_cnt;
+    if (client_cnt < 0) client_cnt = service_args.size();
+
+    vector<struct ConsumerThreadArg> consumer_thread_args(client_cnt);
+    vector<thread> consumer_threads;
+
+    vector<int> assigned_idx = assign_services(client_cnt, service_args.size());
+    for (int i = 0; i < client_cnt; i++) {
+        consumer_thread_args[i].broker = args.broker;
+        consumer_thread_args[i].group_id = args.group_prefix + to_string(i);
+        consumer_thread_args[i].topics.push_back(args.topic_prefix + service_args[assigned_idx[i]].name);
+        consumer_thread_args[i].verbose = args.verbose;
+        consumer_thread_args[i].read_tagged_only = args.read_tagged_only;
+        consumer_thread_args[i].monitor_queue = monitor_queue;
+        consumer_thread_args[i].writer = writer;
+        client_threads.emplace_back(consume_run, &consumer_thread_args[i]);
+    }
+}
+
+void V2xExprConsumerApp::wait_for_running_time() {
+    {
+        unique_lock<mutex> lock(m);
+        cv.wait_for(lock, chrono::milliseconds(args.running_time));
+    }
+    end_flag.store(true, memory_order_release);
+}
+
+void V2xExprConsumerApp::join_clients() {
+    for (auto& client_thread: client_threads) {
+        if (client_thread.joinable()) client_thread.join();
+    }
+}
+
+void V2xExprConsumerApp::send_end_signal_to_threads() {
+    end_flag.store(true, memory_order_release);
     cv.notify_all();
 }
 
-void parse_arguments(int argc, char** argv, Arguments& args) {
+
+void V2xExprConsumerApp::cleanup_main() {
+    send_end_signal_to_threads();
+    join_clients();
+}
+
+namespace {
+
+vector<monitor::ServiceInfo> generate_services(vector<struct ServiceArg> &service_args, string outdir) {
+    std::string latency_file_postfix = "latency.csv";
+    std::string per_sec_file_postfix = "per_sec.csv";
+
+    vector<monitor::ServiceInfo> services;
+    for (size_t i = 0; i < service_args.size(); i++) {
+        unique_ptr<ostream> latecny_out = make_unique<ofstream>(
+            outdir + "/" + service_args[i].name + "_" + latency_file_postfix);
+        unique_ptr<ostream> per_sec_out = make_unique<ofstream>(
+            outdir + "/" + service_args[i].name + "_" + per_sec_file_postfix);
+        services.push_back({
+            service_args[i].name, service_args[i].threshold,
+            latecny_out.get(), per_sec_out.get(), &cout
+        });
+        latency_outs.push_back(std::move(latecny_out));
+        per_sec_outs.push_back(std::move(per_sec_out));
+    }
+
+    return services;
+}
+
+vector<int> assign_services(int num_cars, int num_services) {
+    vector<int> assigned;
+    for (int i = 0; i < num_cars; i++) assigned.push_back(i % num_services);
+    return assigned;
+}
+
+void consume_run(struct ConsumerThreadArg *arg) {
+    string errstr;
+    unique_ptr<RdKafka::Conf> conf(RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL));
+    conf->set("bootstrap.servers", arg->broker, errstr);
+    conf->set("group.id", arg->group_id, errstr);
+    conf->set("client.id", arg->client_id, errstr);
+    conf->set("auto.offset.reset", "latest", errstr);
+    conf->set("fetch.min.bytes", "1", errstr);
+    conf->set("log_level", "0", errstr);
+    if (arg->verbose) {
+        conf->set("log_level", "7", errstr);
+    }
+    unique_ptr<RdKafka::KafkaConsumer> consumer = consumer::create_consumer(conf.get());
+    if (consumer.get() == nullptr) return;
+
+    // Wait for the start flag to be set
+    arg->start_signal->wait();
+    if (!consumer::subscribe_topics(consumer.get(), arg->topics)) return;
+
+    while (!arg->end_flag->load(memory_order_acquire)) {
+        optional<string> plain_msg_opt = consumer::consume_message(consumer.get(), 1);
+        if (!plain_msg_opt.has_value()) continue;
+        arg->monitor_queue->enqueue(
+            make_unique<monitor::StatSumMonitorLog>(
+                plain_msg_opt.value(), "Responded", util::get_current_timestamp()
+            )
+        );
+        arg->writer->notify_if_needed();
+    }
+    consumer->close();
+}
+
+void interrupt_handler(int signum) {
+    app->send_end_signal_to_threads();
+}
+
+Arguments parse_arguments(int argc, char** argv) {
     int opt;
+    Arguments args;
 
     args.group_prefix="";
     args.topic_prefix="";
@@ -83,6 +279,7 @@ void parse_arguments(int argc, char** argv, Arguments& args) {
     args.scrapable = false;
     args.read_tagged_only = false;
     args.verbose = false;
+
     static vector<util::OptionWrapper> options = {
         util::HELP_OPTION,
         util::BROKER_OPTION,
@@ -118,135 +315,8 @@ void parse_arguments(int argc, char** argv, Arguments& args) {
                 exit(EXIT_FAILURE);
         }
     }
+
+    return args;
 }
 
-void consume_run(struct ConsumerThreadArg *arg) {
-    string errstr;
-    unique_ptr<RdKafka::Conf> conf(RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL));
-    conf->set("bootstrap.servers", arg->broker, errstr);
-    conf->set("group.id", arg->group_id, errstr);
-    conf->set("client.id", arg->client_id, errstr);
-    conf->set("auto.offset.reset", "latest", errstr);
-    conf->set("fetch.min.bytes", "1", errstr);
-    conf->set("log_level", "0", errstr);
-    if (arg->verbose) {
-        conf->set("log_level", "7", errstr);
-    }
-    unique_ptr<RdKafka::KafkaConsumer> consumer = consumer::create_consumer(conf.get());
-    if (consumer.get() == nullptr) return;
-
-    // Wait for the start flag to be set
-    while (!start_flag.load(memory_order_acquire)) {
-        this_thread::yield();
-    }
-
-    if (!consumer::subscribe_topics(consumer.get(), arg->topics)) return;
-
-    while (!end_flag.load(memory_order_acquire)) {
-        optional<string> plain_msg_opt = consumer::consume_message(consumer.get(), 1);
-        if (!plain_msg_opt.has_value()) continue;
-        arg->monitor_queue->enqueue(
-            make_unique<monitor::StatSumMonitorLog>(
-                plain_msg_opt.value(), "Responded", util::get_current_timestamp()
-            )
-        );
-        arg->writer->notify_if_needed();
-    }
-}
-
-int main(int argc, char *argv[]) {
-    Arguments args;
-    parse_arguments(argc, argv, args);
-
-    cout << "v2x expr consumer starts at " << util::current_time_str() << endl;
-    if (args.verbose) {
-        cout
-            << "Broker: " << args.broker << "\n"
-            << "Group Prefix: " << args.group_prefix << "\n"
-            << "Topic Prefix: " << args.topic_prefix << "\n"
-            << "Client Count: " << args.client_cnt << "\n"
-            << "Running Time: " << args.running_time << "\n"
-            << "Start Barrier Delay: " << args.start_barrier_delay << "\n"
-            << "Scrapable: " << (args.scrapable ? "on" : "off") << "\n"
-            << "Log Sampling: " << (args.read_tagged_only ? "on" : "off") << "\n"
-            << "Output Directory: " << args.outdir << endl;
-    }
-
-    std::string latency_file_postfix = "latency.csv";
-    std::string per_sec_file_postfix = "per_sec.csv";
-    vector<struct ServiceArg> service_args = {
-        {"S10Hz-Info", 100},
-        {"S10Hz-Sensor", 100},
-        {"S30Hz", 25},
-        {"S50Hz", 20},
-    };
-
-    vector<unique_ptr<ostream>> latency_outs;
-    vector<unique_ptr<ostream>> per_sec_outs;
-    vector<monitor::ServiceInfo> services;
-    for (size_t i = 0; i < service_args.size(); i++) {
-        unique_ptr<ostream> latecny_out = make_unique<ofstream>(
-            args.outdir + "/" + service_args[i].name + "_" + latency_file_postfix);
-        unique_ptr<ostream> per_sec_out = make_unique<ofstream>(
-            args.outdir + "/" + service_args[i].name + "_" + per_sec_file_postfix);
-        services.push_back({
-            service_args[i].name, service_args[i].threshold,
-            latecny_out.get(), per_sec_out.get(), &cout
-        });
-        latency_outs.push_back(std::move(latecny_out));
-        per_sec_outs.push_back(std::move(per_sec_out));
-    }
-
-    int client_cnt = args.client_cnt;
-    if (client_cnt < 0) client_cnt = services.size();
-
-    shared_ptr<moniq::MonitorQueue> monitor_queue = make_shared<moniq::MonitorQueue>();
-    shared_ptr<moniq::writer::IMonitorLogWriteStrategy> write_strategy = make_shared<monitor::StatSumPerSecMonitorLogWriteStrategy>(services);
-    shared_ptr<moniq::writer::MonitorLogWriter> writer = make_shared<moniq::writer::MonitorLogWriter>(monitor_queue, write_strategy, -1, -1);
-
-    thread writer_thread(&moniq::writer::MonitorLogWriter::run, writer);
-
-    vector<struct ConsumerThreadArg> consumer_thread_args(client_cnt);
-    vector<thread> consumer_threads;
-
-    vector<int> assigned_idx = assign_services(client_cnt, services.size());
-
-    for (int i = 0; i < client_cnt; i++) {
-        consumer_thread_args[i].broker = args.broker;
-        consumer_thread_args[i].group_id = args.group_prefix + "group_" + to_string(i);
-        consumer_thread_args[i].topics.push_back(args.topic_prefix + services[assigned_idx[i]].name);
-        consumer_thread_args[i].verbose = args.verbose;
-        consumer_thread_args[i].read_tagged_only = args.read_tagged_only;
-        consumer_thread_args[i].monitor_queue = monitor_queue;
-        consumer_thread_args[i].writer = writer;
-        consumer_threads.emplace_back(consume_run, &consumer_thread_args[i]);
-    }
-    signal(SIGINT, interrupt_handler);
-    signal(SIGTERM, interrupt_handler);
-
-    cout << "All threads are ready.\n"
-         << "Start " << client_cnt << " consumers at " << args.start_barrier_delay << "milli seconds later." << endl;
-    this_thread::sleep_for(chrono::milliseconds(args.start_barrier_delay));
-
-    start_flag.store(true, memory_order_release);
-
-    {
-        unique_lock<mutex> lock(m);
-        cv.wait_for(lock, chrono::milliseconds(args.running_time));
-    }
-    end_flag.store(true, memory_order_release);
-
-    for (auto& consumer_thread: consumer_threads) {
-        consumer_thread.join();
-    }
-    writer->graceful_shutdown();
-    writer_thread.join();
-
-    return 0;
-}
-
-vector<int> assign_services(int num_cars, int num_services) {
-    vector<int> assigned;
-    for (int i = 0; i < num_cars; i++) assigned.push_back(i % num_services);
-    return assigned;
 }
