@@ -46,11 +46,11 @@ CONFIG_FILE=""
 
 # --- Argument Parsing ---
 TEMP=$(getopt -o d:vh --longoptions \
-  "config:, verbose, help, kafka-broker:, mqtt-broker:, common-script-root:, \
-  connect-host:, connect-root:, connect-out:, connect-temp:, connect-exec:, \
-  r-client-host:, r-client-root:, r-client-out:, r-client-temp:, r-consumer-exec:, \
-  client-root:, client-out:, client-temp:, consumer-exec:, producer-exec:, duration:" \
-  -n 'myscript' -- "$@" \
+    "config:, verbose, help, kafka-broker:, mqtt-broker:, common-script-root:, \
+    connect-host:, connect-root:, connect-out:, connect-temp:, connect-exec:, \
+    r-client-host:, r-client-root:, r-client-out:, r-client-temp:, r-consumer-exec:, \
+    client-root:, client-out:, client-temp:, consumer-exec:, producer-exec:, duration:" \
+    -n 'myscript' -- "$@" \
 )
 
 if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
@@ -225,31 +225,31 @@ if [ -z "$CONNECT_OUT" ]; then
   CONNECT_OUT=${CONNECT_ROOT}/out
 fi
 if [ -z "$CONNECT_TEMP" ]; then
-  CONNECT_TEMP=${CONNECT_ROOT}/temp
+    CONNECT_TEMP=${CONNECT_ROOT}/temp
 fi
 if [ -z "$CONNECT_EXEC" ]; then
-  CONNECT_EXEC=${CONNECT_ROOT}/bin/Connect
+    CONNECT_EXEC=${CONNECT_ROOT}/bin/Connect
 fi
 if [ -z "$R_CLIENT_OUT" ]; then
-  R_CLIENT_OUT=${R_CLIENT_ROOT}/out
+    R_CLIENT_OUT=${R_CLIENT_ROOT}/out
 fi
 if [ -z "$R_CLIENT_TEMP" ]; then
-  R_CLIENT_TEMP=${R_CLIENT_ROOT}/temp
+    R_CLIENT_TEMP=${R_CLIENT_ROOT}/temp
 fi
 if [ -z "$R_CONSUMER_EXEC" ]; then
-  R_CONSUMER_EXEC=${R_CLIENT_ROOT}/bin/Vehicle
+    R_CONSUMER_EXEC=${R_CLIENT_ROOT}/bin/Vehicle
 fi
 if [ -z "$CLIENT_OUT" ]; then
-  CLIENT_OUT=${CLIENT_ROOT}/out
+    CLIENT_OUT=${CLIENT_ROOT}/out
 fi
 if [ -z "$CLIENT_TEMP" ]; then
-  CLIENT_TEMP=${CLIENT_ROOT}/temp
+    CLIENT_TEMP=${CLIENT_ROOT}/temp
 fi
 if [ -z "$CONSUMER_EXEC" ]; then
-  CONSUMER_EXEC=${CLIENT_ROOT}/bin/Vehicle
+    CONSUMER_EXEC=${CLIENT_ROOT}/bin/Vehicle
 fi
 if [ -z "$PRODUCER_EXEC" ]; then
-  PRODUCER_EXEC=${CLIENT_ROOT}/bin/Producer
+    PRODUCER_EXEC=${CLIENT_ROOT}/bin/Producer
 fi
 
 # --- Script Logic ---
@@ -285,39 +285,39 @@ fi
 
 # clean up functions
 clean_up_connect() {
-  IDENTIFIER=$1
-  CONNECT_COMMAND="$CONNECT_ROOT/script/run-on-bg.sh --id $IDENTIFIER --terminate --out-dir $CONNECT_OUT --temp-dir $CONNECT_TEMP"
-  if [ $CONNECT_HOST == "" ]; then
-    $CONNECT_COMMAND
-  else
-    ssh $CONNECT_HOST $CONNECT_COMMAND
-  fi
+    IDENTIFIER=$1
+    CONNECT_COMMAND="$CONNECT_ROOT/script/run-on-bg.sh --id $IDENTIFIER --terminate --out-dir $CONNECT_OUT --temp-dir $CONNECT_TEMP"
+    if [ $CONNECT_HOST == "" ]; then
+        $CONNECT_COMMAND
+    else
+        ssh $CONNECT_HOST $CONNECT_COMMAND
+    fi
 }
 
 clean_up_consumer() {
-  IDENTIFIER=$1
-  $CLIENT_ROOT/script/run-on-bg.sh --id $IDENTIFIER --terminate --out-dir $CLIENT_OUT --temp-dir $CLIENT_TEMP
+    IDENTIFIER=$1
+    $CLIENT_ROOT/script/run-on-bg.sh --id $IDENTIFIER --terminate --out-dir $CLIENT_OUT --temp-dir $CLIENT_TEMP
 }
 
 clean_up_r_consumer() {
-  IDENTIFIER=$1
-  R_CONSUMER_COMMAND="$R_CLIENT_ROOT/script/run-on-bg.sh --id $IDENTIFIER --terminate --out-dir $R_CLIENT_OUT --temp-dir $R_CLIENT_TEMP"
-  if [ $R_CLIENT_HOST == "" ]; then
-    $R_CONSUMER_COMMAND
-  else 
-    ssh $R_CLIENT_HOST $R_CONSUMER_COMMAND
-  fi
+    IDENTIFIER=$1
+    R_CONSUMER_COMMAND="$R_CLIENT_ROOT/script/run-on-bg.sh --id $IDENTIFIER --terminate --out-dir $R_CLIENT_OUT --temp-dir $R_CLIENT_TEMP"
+    if [ $R_CLIENT_HOST == "" ]; then
+        $R_CONSUMER_COMMAND
+    else 
+        ssh $R_CLIENT_HOST $R_CONSUMER_COMMAND
+    fi
 }
 
 # trap handler
 trap_handler() {
-  echo "[TRAP] Ctrl+C 감지! 정리 중..."
+    echo "[TRAP] Ctrl+C 감지! 정리 중..."
 
-  sleep 10
-  clean_up_consumer $CONSUMER_ID
-  clean_up_r_consumer $R_CONSUMER_ID
-  clean_up_connect $CONNECT_ID
-  exit 1
+    sleep 10
+    clean_up_consumer $CONSUMER_ID
+    clean_up_r_consumer $R_CONSUMER_ID
+    clean_up_connect $CONNECT_ID
+    exit 1
 }
 trap trap_handler SIGINT
 
@@ -327,89 +327,89 @@ echo "🚀 start test script"
 echo "==============================================="
 
 for CAR_NUM in "${NUM_CAR[@]}"; do
-  CURRENT_CAR_NUM=$CAR_NUM
+    CURRENT_CAR_NUM=$CAR_NUM
 
-  echo "==================================================="
-  echo "[INFO] 실험 시작: NUM_CAR=$CURRENT_CAR_NUM"
-  echo "==================================================="
-
-  echo "[1/7] 원격 Connect 실행 (setsid + pgrep)"
-  CONNECT_ID="Connect_${CURRENT_CAR_NUM}"
-  CONNECT_COMMAND="$CONNECT_ROOT/script/run-on-bg.sh --id $CONNECT_ID \
-      --out-dir $CONNECT_OUT --temp-dir $CONNECT_TEMP \
-      --exec-path $CONNECT_EXEC 1"
-  if [ $CONNECT_HOST == "" ]; then
-    $CONNECT_COMMAND
-  else 
-    ssh $CONNECT_HOST $CONNECT_COMMAND
-  fi
-
-  echo "[2/7] Consumer Groups 삭제"
-  $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "group_" --count $CURRENT_CAR_NUM
-  $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --count 4
-  echo "[INFO] 모든 Consumer Groups 삭제 완료"
-
-  echo "[3/7] Remote(11) Consumer 실행 (SIGTERM-safe)"
-  R_CONSUMER_ID="RemoteConsumer_${CURRENT_CAR_NUM}"
-  R_CONSUMER_COMMAND="$R_CLIENT_ROOT/script/run-on-bg.sh --id $R_CONSUMER_ID \
-      --out-dir $R_CLIENT_OUT --temp-dir $R_CLIENT_TEMP \
-      --exec-path $R_CONSUMER_EXEC -- \
-          --broker $KAFKA_BROKER --group_prefix 'r_' \
-          --client_cnt -1 --running_time 1000000000 \
-          --outdir $R_CLIENT_OUT --verbose"
-  if [ $R_CLIENT_HOST == "" ]; then
-    $R_CONSUMER_COMMAND
-  else 
-    ssh $R_CLIENT_HOST $R_CONSUMER_COMMAND
-  fi
-
-  echo "[4/7] Local(101) Consumer 실행 (SIGTERM-safe)"
-  CONSUMER_ID="Consumer_${CURRENT_CAR_NUM}"
-  $CLIENT_ROOT/script/run-on-bg.sh --id $CONSUMER_ID \
-      --out-dir $CLIENT_OUT --temp-dir $CLIENT_TEMP \
-      --exec-path $CONSUMER_EXEC -- \
-          --broker $KAFKA_BROKER \
-          --client_cnt $CURRENT_CAR_NUM --running_time 1000000000 \
-          --outdir $CLIENT_OUT --verbose
-
-  GAURD_TIME=5
-  echo "${GAURD_TIME}초 대기 후 다음 작업 실행..."
-  sleep $GAURD_TIME
-
-  echo "[5/7] Consumer Groups 연결 확인"
-  $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "group_" --count $CURRENT_CAR_NUM
-  $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --count 4
-
-  echo "[6/7] Producer 실행"
-  $PRODUCER_EXEC --broker $MQTT_BROKER --client_cnt $CURRENT_CAR_NUM \
-      --running_time $DURATION --verbose
-  echo "[INFO] Producer 종료됨."
-
-  GAURD_TIME=5
-  echo "${GAURD_TIME}초 대기 후 다음 작업 실행..."
-  sleep $GAURD_TIME
-
-  echo "[7/7] Consumer + Connect 종료"
-  clean_up_consumer $CONSUMER_ID
-  clean_up_r_consumer $R_CONSUMER_ID
-  clean_up_connect $CONNECT_ID
-
-  GAURD_TIME=30
-  echo "${GAURD_TIME}초 대기 후 다음 작업 실행..."
-  sleep $GAURD_TIME
-
-  echo "[8/8] 결과 Final_Result.txt 에 누적 저장 + 터미널 출력"
-  TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-
-  {
-    echo ""
     echo "==================================================="
-    echo "[RESULT] NUM_CAR = $CURRENT_CAR_NUM"
-    echo "[RESULT] TIMESTAMP   = $TIMESTAMP"
+    echo "[INFO] 실험 시작: NUM_CAR=$CURRENT_CAR_NUM"
     echo "==================================================="
-    ssh $R_CLIENT_HOST "cat $R_CLIENT_OUT/$R_CONSUMER_ID.log"
-  }
-  echo "-------------------------------------"
+
+    echo "[1/7] 원격 Connect 실행 (setsid + pgrep)"
+    CONNECT_ID="Connect_${CURRENT_CAR_NUM}"
+    CONNECT_COMMAND="$CONNECT_ROOT/script/run-on-bg.sh --id $CONNECT_ID \
+        --out-dir $CONNECT_OUT --temp-dir $CONNECT_TEMP \
+        --exec-path $CONNECT_EXEC 1"
+    if [ $CONNECT_HOST == "" ]; then
+        $CONNECT_COMMAND
+    else 
+        ssh $CONNECT_HOST $CONNECT_COMMAND
+    fi
+
+    echo "[2/7] Consumer Groups 삭제"
+    $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "group_" --count $CURRENT_CAR_NUM
+    $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --count 4
+    echo "[INFO] 모든 Consumer Groups 삭제 완료"
+
+    echo "[3/7] Remote(11) Consumer 실행 (SIGTERM-safe)"
+    R_CONSUMER_ID="RemoteConsumer_${CURRENT_CAR_NUM}"
+    R_CONSUMER_COMMAND="$R_CLIENT_ROOT/script/run-on-bg.sh --id $R_CONSUMER_ID \
+        --out-dir $R_CLIENT_OUT --temp-dir $R_CLIENT_TEMP \
+        --exec-path $R_CONSUMER_EXEC -- \
+            --broker $KAFKA_BROKER --group_prefix 'r_' \
+            --client_cnt -1 --running_time 1000000000 \
+            --outdir $R_CLIENT_OUT --verbose"
+    if [ $R_CLIENT_HOST == "" ]; then
+       $R_CONSUMER_COMMAND
+    else 
+        ssh $R_CLIENT_HOST $R_CONSUMER_COMMAND
+    fi
+
+    echo "[4/7] Local(101) Consumer 실행 (SIGTERM-safe)"
+    CONSUMER_ID="Consumer_${CURRENT_CAR_NUM}"
+    $CLIENT_ROOT/script/run-on-bg.sh --id $CONSUMER_ID \
+        --out-dir $CLIENT_OUT --temp-dir $CLIENT_TEMP \
+        --exec-path $CONSUMER_EXEC -- \
+            --broker $KAFKA_BROKER \
+            --client_cnt $CURRENT_CAR_NUM --running_time 1000000000 \
+            --outdir $CLIENT_OUT --verbose
+
+    GAURD_TIME=5
+    echo "${GAURD_TIME}초 대기 후 다음 작업 실행..."
+    sleep $GAURD_TIME
+
+    echo "[5/7] Consumer Groups 연결 확인"
+    $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "group_" --count $CURRENT_CAR_NUM
+    $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --count 4
+
+    echo "[6/7] Producer 실행"
+    $PRODUCER_EXEC --broker $MQTT_BROKER --client_cnt $CURRENT_CAR_NUM \
+        --running_time $DURATION --verbose
+    echo "[INFO] Producer 종료됨."
+
+    GAURD_TIME=5
+    echo "${GAURD_TIME}초 대기 후 다음 작업 실행..."
+    sleep $GAURD_TIME
+
+    echo "[7/7] Consumer + Connect 종료"
+    clean_up_consumer $CONSUMER_ID
+    clean_up_r_consumer $R_CONSUMER_ID
+    clean_up_connect $CONNECT_ID
+
+    GAURD_TIME=30
+    echo "${GAURD_TIME}초 대기 후 다음 작업 실행..."
+    sleep $GAURD_TIME
+
+    echo "[8/8] 결과 Final_Result.txt 에 누적 저장 + 터미널 출력"
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
+    {
+        echo ""
+        echo "==================================================="
+        echo "[RESULT] NUM_CAR = $CURRENT_CAR_NUM"
+        echo "[RESULT] TIMESTAMP   = $TIMESTAMP"
+        echo "==================================================="
+        ssh $R_CLIENT_HOST "cat $R_CLIENT_OUT/$R_CONSUMER_ID.log"
+    }
+    echo "-------------------------------------"
 done
 
 echo "==================================================="
