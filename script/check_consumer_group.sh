@@ -124,13 +124,12 @@ EXISTING_GROUPS=$($KAFKA_BIN_PATH/kafka-consumer-groups.sh --bootstrap-server $B
 ALL_CONNECTED=1
 for ((i=START_IDX; i<START_IDX+COUNT; ++i)); do
     group="$PREFIX$i"
-    if !echo "$EXISTING_GROUPS" | grep -q "^$group$"; then
+    if ! echo "$EXISTING_GROUPS" | grep -q "^$group$"; then
         if [ $VERBOSE -eq 1 ]; then
             echo "[CG_CHECKER] $group has not connected yet."
         fi
         ALL_CONNECTED=0
         break
-    fi
     elif [ $VERBOSE -eq 1 ]; then
         echo "[CG_CHECKER] $group is connected."
     fi

@@ -287,11 +287,8 @@ if [ "$VERBOSE" -eq 1 ]; then
     echo "--------------------------"
 
     # Handle positional arguments. After the getopt loop, "$@" contains the remaining positional arguments.
-    if [ -n "$@" ]; then
-        echo "Positional Arguments:"
-        for arg in "$@"; do
-            echo "  - $arg"
-        done
+    if [ $# -gt 0 ]; then
+        echo "Positional Arguments: $@"
     fi
 fi
 
@@ -385,7 +382,11 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
           --broker $KAFKA_BROKER \
           --client_cnt $CURRENT_CAR_NUM --running_time 1000000000 \
           --outdir $CLIENT_OUT --verbose
-  
+
+  GAURD_TIME=5
+  echo "${GAURD_TIME}초 대기 후 다음 작업 실행..."
+  sleep $GAURD_TIME
+
   echo "[5/7] Consumer Groups 연결 확인"
   $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "group_" --count $CURRENT_CAR_NUM
   $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --count 4
@@ -395,7 +396,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
       --running_time $DURATION --verbose
   echo "[INFO] Producer 종료됨."
 
-  GAURD_TIME=10
+  GAURD_TIME=5
   echo "${GAURD_TIME}초 대기 후 다음 작업 실행..."
   sleep $GAURD_TIME
 
