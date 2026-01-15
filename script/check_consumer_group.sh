@@ -11,13 +11,12 @@ BROKER="127.0.0.1:9092"
 PREFIX="group-"
 START_IDX=0
 COUNT=1
-RETRIES=2
 VERBOSE=0
 HELP=0
 CONFIG_FILE=""
 
 # --- Argument Parsing ---
-TEMP=$(getopt -o b:p:c:vh --longoptions kafka-bin-path:,broker:,prefix:,start-idx:,count:,retries:,verbose,help,config: -n 'myscript' -- "$@")
+TEMP=$(getopt -o b:p:c:vh --longoptions kafka-bin-path:,broker:,prefix:,start-idx:,count:,verbose,help,config: -n 'myscript' -- "$@")
 if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
 eval set -- "$TEMP"
 
@@ -25,7 +24,6 @@ eval set -- "$TEMP"
 CL_KAFKA_BIN_PATH=""
 CL_BROKER=""
 CL_PREFIX=""
-CL_RETRIES=""
 CL_START_IDX=""
 CL_COUNT=""
 CL_VERBOSE=""
@@ -39,7 +37,6 @@ while true ; do
         -p|--prefix) CL_PREFIX="$2" ; shift 2;;
         --start-idx) CL_START_IDX="$2" ; shift 2;;
         -c|--count) CL_COUNT="$2" ; shift 2 ;;
-        --retries) CL_RETRIES="$2" ; shift 2;;
         -v|--verbose) CL_VERBOSE=1 ; shift ;;
         -h|--help) HELP=1 ; shift ;;
         --) shift ; break ;;
@@ -77,9 +74,6 @@ fi
 if [ -n "$CL_COUNT" ]; then
     COUNT="$CL_COUNT"
 fi
-if [ -n "$CL_RETRIES" ]; then
-    RETRIES="$CL_RETRIES"
-fi
 if [ -n "$CL_VERBOSE" ]; then
     VERBOSE="$CL_VERBOSE"
 fi
@@ -97,7 +91,6 @@ if [ "$HELP" -eq 1 ]; then
     echo "  -p, --prefix <prefix>             Prefix for consumer group names. (Default: group-)"
     echo "      --start-idx <number>          Starting index for consumer group names. (Default: 0)"
     echo "  -c, --count <number>              Number of consumer groups to check. (Default: 1)"
-    echo "      --retries <number>            Number of retries for checking. (Default: 2)"
     echo "  -v, --verbose                     Enable verbose output. (Config key: VERBOSE=1)"
     echo "  -h, --help                        Display this help message and exit."
     echo ""
@@ -115,7 +108,6 @@ if [ "$VERBOSE" -eq 1 ]; then
     echo "Prefix:             $PREFIX"
     echo "Start Index:        $START_IDX"
     echo "Count:              $COUNT"
-    echo "Retries:            $RETRIES"
     echo "Verbose Mode:       $VERBOSE"
     echo "--------------------------"
 
@@ -126,34 +118,28 @@ if [ "$VERBOSE" -eq 1 ]; then
 fi
 
 # script's main logic
-for retry in $(seq 1 $RETRIES); do
-    echo "[CG_CHECKER] Checking Consumer Group Connection... (try count: $retry)"
+echo "[CG_CHECKER] Fetching active consumer groups..."
+EXISTING_GROUPS=$($KAFKA_BIN_PATH/kafka-consumer-groups.sh --bootstrap-server $BROKER --list 2>&1)
 
-    ALL_CONNECTED=1
-    for ((i=START_IDX; i<START_IDX+COUNT; ++i)); do
-        group="$PREFIX$i"
-        DESC=$($KAFKA_BIN_PATH/kafka-consumer-groups.sh --bootstrap-server $BROKER --describe --group $group 2>&1)
-
-        if [[ "$DESC" == *"does not exist"* ]]; then
-            if [ $VERBOSE -eq 1 ]; then
-                echo "[CG_CHECKER] $group has not connected yet."
-            fi
-            ALL_CONNECTED=0
-            break
-        elif [ $VERBOSE -eq 1 ]; then
-            echo "[CG_CHECKER] $group is connected."
+ALL_CONNECTED=1
+for ((i=START_IDX; i<START_IDX+COUNT; ++i)); do
+    group="$PREFIX$i"
+    if !echo "$EXISTING_GROUPS" | grep -q "^$group$"; then
+        if [ $VERBOSE -eq 1 ]; then
+            echo "[CG_CHECKER] $group has not connected yet."
         fi
-    done
-    if [[ $ALL_CONNECTED -eq 1 ]]; then
-        echo "[CG_CHECKER] ✅ All $COUNT Consumer Groups are connected."
-        exit 0
-    else
-        echo "[CG_CHECKER] ⚠️ Not all Consumer Groups are connected yet."
-        if [[ $retry -lt $RETRIES ]]; then
-            echo "[CG_CHECKER] Retrying in $retry seconds..."
-            sleep $retry
-        fi
+        ALL_CONNECTED=0
+        break
+    fi
+    elif [ $VERBOSE -eq 1 ]; then
+        echo "[CG_CHECKER] $group is connected."
     fi
 done
-echo "[CG_CHECKER] ❌ Some Consumer Groups failed to connect after $RETRIES retries." >&2
-exit 1
+
+if [[ $ALL_CONNECTED -eq 1 ]]; then
+    echo "[CG_CHECKER] ✅ All $COUNT Consumer Groups are connected."
+    exit 0
+else
+    echo "[CG_CHECKER] ❌ Some Consumer Groups failed to connect." >&2
+    exit 1
+fi
