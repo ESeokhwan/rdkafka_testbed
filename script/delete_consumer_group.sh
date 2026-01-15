@@ -9,6 +9,7 @@
 KAFKA_BIN_PATH="."
 BROKER="127.0.0.1:9092"
 PREFIX="group-"
+START_IDX=0
 COUNT=0
 MAX_PARALLEL=64
 VERBOSE=0
@@ -16,7 +17,7 @@ HELP=0
 CONFIG_FILE=""
 
 # --- Argument Parsing ---
-TEMP=$(getopt -o b:p:c:vh --longoptions kafka-bin-path:,broker:,prefix:,count:,max-parallel:,verbose,help,config: -n 'myscript' -- "$@")
+TEMP=$(getopt -o b:p:c:vh --longoptions kafka-bin-path:,broker:,prefix:,start-idx:,count:,max-parallel:,verbose,help,config: -n 'myscript' -- "$@")
 if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
 eval set -- "$TEMP"
 
@@ -25,6 +26,7 @@ CL_KAFKA_BIN_PATH=""
 CL_BROKER=""
 CL_PREFIX=""
 CL_MAX_PARALLEL=""
+CL_START_IDX=""
 CL_COUNT=""
 CL_VERBOSE=""
 
@@ -35,6 +37,7 @@ while true ; do
         --kafka-bin-path) CL_KAFKA_BIN_PATH="$2" ; shift 2;;
         -b|--broker) CL_BROKER="$2" ; shift 2;;
         -p|--prefix) CL_PREFIX="$2" ; shift 2;;
+        --start-idx) CL_START_IDX="$2" ; shift 2;;
         -c|--count) CL_COUNT="$2" ; shift 2 ;;
         --max-parallel) CL_MAX_PARALLEL="$2" ; shift 2;;
         -v|--verbose) CL_VERBOSE=1 ; shift ;;
@@ -68,6 +71,9 @@ fi
 if [ -n "$CL_PREFIX" ]; then
     PREFIX="$CL_PREFIX"
 fi
+if [ -n "$CL_START_IDX" ]; then
+    START_IDX="$CL_START_IDX"
+fi
 if [ -n "$CL_COUNT" ]; then
     COUNT="$CL_COUNT"
 fi
@@ -89,6 +95,7 @@ if [ "$HELP" -eq 1 ]; then
     echo "      --kafka-bin-path <path>       Directory where Kafka command-line tools are located. (Default: .)"
     echo "  -b, --broker <host:port>          Kafka broker address. (Default: 127.0.0.1:9092)"
     echo "  -p, --prefix <prefix>             Prefix for consumer group names. (Default: group-)"
+    echo "      --start-idx <number>          Starting index for consumer group names. (Default: 0)"
     echo "  -c, --count <number>              Number of consumer groups to delete. (Default: 0)"
     echo "      --max-parallel <number>       Maximum parallel deletions. (Default: 64)"
     echo "  -v, --verbose                     Enable verbose output. (Config key: VERBOSE=1)"
@@ -106,23 +113,21 @@ if [ "$VERBOSE" -eq 1 ]; then
     echo "Kafka Bin:          $KAFKA_BIN_PATH"
     echo "Broker:             $BROKER"
     echo "Prefix:             $PREFIX"
+    echo "Start Index:        $START_IDX"
     echo "Count:              $COUNT"
     echo "Max Parallel:       $MAX_PARALLEL"
     echo "Verbose Mode:       $VERBOSE"
     echo "--------------------------"
 
     # Handle positional arguments. After the getopt loop, "$@" contains the remaining positional arguments.
-    if [ -n "$@" ]; then
-        echo "Positional Arguments:"
-        for arg in "$@"; do
-            echo "  - $arg"
-        done
+    if [ $# -gt 0 ]; then
+        echo "Positional Arguments: $@"
     fi
 fi
 
 # script's main logic
 running=0
-for ((i=1; i<=COUNT; ++i)); do
+for ((i=START_IDX; i<START_IDX+COUNT; ++i)); do
     {
         group="$PREFIX$i"
         $KAFKA_BIN_PATH/kafka-consumer-groups.sh --bootstrap-server "$BROKER" --delete --group "$group"
