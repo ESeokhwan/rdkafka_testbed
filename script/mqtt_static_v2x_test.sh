@@ -373,7 +373,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
         --exec-path $R_CONSUMER_EXEC -- \
             --broker $KAFKA_BROKER --group_prefix 'r_group_' \
             --client_cnt -1 --running_time $INF_DURATION_MS \
-            --outdir $R_CLIENT_OUT $VERBOSE_TAG"
+            --outdir $R_CLIENT_OUT --out_prefix '${CURRENT_CAR_NUM}C_' $VERBOSE_TAG"
     if [ $R_CLIENT_HOST == "" ]; then
        $R_CONSUMER_COMMAND
     else 
@@ -389,7 +389,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
         --exec-path $CONSUMER_EXEC -- \
             --broker $KAFKA_BROKER --group_prefix 'group_' \
             --client_cnt $CURRENT_CAR_NUM --running_time $INF_DURATION_MS \
-            --outdir $CLIENT_OUT $VERBOSE_TAG
+            --outdir $CLIENT_OUT --out_prefix '${CURRENT_CAR_NUM}C_' $VERBOSE_TAG
     echo "--------------------------------------------------"
 
     GAURD_TIME=5
