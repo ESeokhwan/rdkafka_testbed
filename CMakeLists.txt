@@ -26,18 +26,18 @@ find_package(Threads REQUIRED)
 find_package(Boost REQUIRED COMPONENTS system)
 find_package(unofficial-mosquitto CONFIG REQUIRED)
 
+add_subdirectory(libmoniq)
+
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--disable-new-dtags")
 set(CMAKE_SKIP_BUILD_RPATH FALSE)
-set(CMAKE_BUILD_RPATH "${PROJECT_SOURCE_DIR}/librdkafka/install/lib;${PROJECT_SOURCE_DIR}/libmoniq/install/lib")
+set(CMAKE_BUILD_RPATH "${PROJECT_SOURCE_DIR}/librdkafka/install/lib")
 
 include_directories(
     ${PROJECT_SOURCE_DIR}/librdkafka/install/include
-    ${PROJECT_SOURCE_DIR}/libmoniq/install/include
     ${PROJECT_SOURCE_DIR}/src/common
 )
 link_directories(
     ${PROJECT_SOURCE_DIR}/librdkafka/install/lib
-    ${PROJECT_SOURCE_DIR}/libmoniq/install/lib
 )
 
 file(GLOB_RECURSE COMMON_SOURCES
@@ -59,6 +59,7 @@ target_include_directories(common PUBLIC
 
 target_link_libraries(common PUBLIC 
     Boost::system
+    moniq
 )
 
 file(GLOB APP_SOURCES
