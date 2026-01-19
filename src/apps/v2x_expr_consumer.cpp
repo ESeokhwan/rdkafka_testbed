@@ -8,11 +8,9 @@
 
 #include <atomic>
 #include <csignal>
-#include <condition_variable>
 #include <iostream>
 #include <fstream>
 #include <memory>
-#include <mutex>
 #include <getopt.h>
 #include <thread>
 
@@ -74,8 +72,6 @@ private:
     vector<ConsumerThreadArg> consumer_thread_args;
     vector<thread> client_threads;
 
-    mutex m;
-    condition_variable cv;
     atomic<bool> end_flag;
 
     void init_clients();
@@ -100,6 +96,7 @@ public:
 
 // Define global variables & helper functions
 namespace {
+    atomic<bool> g_signal_received(false);
     V2xExprConsumerApp *app;
     vector<unique_ptr<ostream>> latency_outs;
     vector<unique_ptr<ostream>> per_sec_outs;
@@ -126,7 +123,7 @@ int main(int argc, char *argv[]) {
             << "Start Barrier Delay: " << args.start_barrier_delay << "\n"
             << "Scrapable: " << (args.scrapable ? "on" : "off") << "\n"
             << "Log Sampling: " << (args.read_tagged_only ? "on" : "off") << "\n"
-            << "Output Directory: " << args.outdir 
+            << "Output Directory: " << args.outdir
             << "Output File Prefix: " << args.out_prefix << endl;
     }
 
@@ -157,7 +154,6 @@ void V2xExprConsumerApp::run() {
 
     start_barrier(args.start_barrier_delay);
     wait_for_running_time();
-    join_clients();
 }
 
 void V2xExprConsumerApp::init_clients() {
@@ -183,9 +179,13 @@ void V2xExprConsumerApp::init_clients() {
 }
 
 void V2xExprConsumerApp::wait_for_running_time() {
-    {
-        unique_lock<mutex> lock(m);
-        cv.wait_for(lock, chrono::milliseconds(args.running_time));
+    auto end_time = chrono::steady_clock::now() + chrono::milliseconds(args.running_time);
+
+    while (chrono::steady_clock::now() < end_time) {
+        if (g_signal_received.load()) {
+            break;
+        }
+        this_thread::sleep_for(chrono::milliseconds(100));
     }
     end_flag.store(true, memory_order_release);
 }
@@ -198,12 +198,10 @@ void V2xExprConsumerApp::join_clients() {
 
 void V2xExprConsumerApp::send_end_signal_to_threads() {
     end_flag.store(true, memory_order_release);
-    cv.notify_all();
 }
 
 
 void V2xExprConsumerApp::cleanup_main() {
-    send_end_signal_to_threads();
     join_clients();
 }
 
@@ -269,7 +267,7 @@ void consume_run(struct ConsumerThreadArg *arg) {
 }
 
 void interrupt_handler(int signum) {
-    app->send_end_signal_to_threads();
+    g_signal_received.store(true);
 }
 
 Arguments parse_arguments(int argc, char** argv) {
