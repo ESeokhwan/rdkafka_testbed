@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.30)
 
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     if(EXISTS "${CMAKE_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake")
@@ -57,7 +57,7 @@ target_include_directories(common PUBLIC
     ${PROJECT_SOURCE_DIR}/src/common
 )
 
-target_link_libraries(common PUBLIC 
+target_link_libraries(common PUBLIC
     Boost::system
     moniq
 )
