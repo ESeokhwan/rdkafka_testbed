@@ -7,8 +7,6 @@
 
 # --- Default values for options ---
 ID="run-on-bg"
-EXEC_PATH=""
-OUT_DIR="out"
 TEMP_DIR="temp"
 VERBOSE=0
 HELP=0
@@ -16,7 +14,7 @@ CONFIG_FILE=""
 
 # --- Argument Parsing ---
 TEMP=$(getopt -o o:vh --longoptions \
-    config:,verbose,help,id:,exec-path:,out-dir:,temp-dir: \
+    config:,verbose,help,id:,temp-dir: \
     -n 'myscript' -- "$@" \
 )
 
@@ -25,8 +23,6 @@ eval set -- "$TEMP"
 
 # Temporary variables to store command-line arguments
 CL_ID=""
-CL_EXEC_PATH=""
-CL_OUT_DIR=""
 CL_TEMP_DIR=""
 CL_VERBOSE=""
 
@@ -35,8 +31,6 @@ while true ; do
     case "$1" in
         --config) CONFIG_FILE="$2" ; shift 2 ;;
         --id) CL_ID="$2" ; shift 2 ;;
-        --exec-path) CL_EXEC_PATH="$2" ; shift 2 ;;
-        --out-dir) CL_OUT_DIR="$2" ; shift 2 ;;
         --temp-dir) CL_TEMP_DIR="$2" ; shift 2 ;;
         -v|--verbose) CL_VERBOSE=1 ; shift ;;
         -h|--help) HELP=1 ; shift ;;
@@ -49,13 +43,11 @@ done
 if [ "$HELP" -eq 1 ]; then
     echo "Usage: $(basename "$0") [OPTIONS] [POSITIONAL_ARG1] [POSITIONAL_ARG2...]"
     echo ""
-    echo "This script runs the executable file on background."
+    echo "This script terminates the running process executed by run-on-bg.sh on background."
     echo ""
     echo "Options:"
     echo "      --config <path>               Path to a configuration file. (e.g., key=\"value\" pairs)"
     echo "      --id <identifier>             Identifier for the run instance."
-    echo "      --exec-path <path>            Path to the executable to run in background."
-    echo "  -o, --out-dir <path>              Directory where output logs will be stored. (Default: out)"
     echo "      --temp-dir <path>             Directory where temporary files will be stored. (Default: temp)"
     echo "  -v, --verbose                     Enable verbose output. (Config key: VERBOSE=1)"
     echo "  -h, --help                        Display this help message and exit."
@@ -84,12 +76,6 @@ fi
 if [ -n "$CL_ID" ]; then
     ID="$CL_ID"
 fi
-if [ -n "$CL_EXEC_PATH" ]; then
-    EXEC_PATH="$CL_EXEC_PATH"
-fi
-if [ -n "$CL_OUT_DIR" ]; then
-    OUT_DIR="$CL_OUT_DIR"
-fi
 if [ -n "$CL_TEMP_DIR" ]; then
     TEMP_DIR="$CL_TEMP_DIR"
 fi
@@ -101,8 +87,6 @@ fi
 if [ "$VERBOSE" -eq 1 ]; then
     echo "--- Script Configuration ---"
     echo "Id:                 $ID"
-    echo "Execution Target:   $EXEC_PATH"
-    echo "Output Dir:         $OUT_DIR"
     echo "Temp Dir:           $TEMP_DIR"
     echo "Verbose Mode:       $VERBOSE"
     echo "--------------------------"
@@ -113,10 +97,12 @@ if [ "$VERBOSE" -eq 1 ]; then
     fi
 fi
 
-EXEC_COMMAND="$EXEC_PATH $@"
-# --- script's main logic ---
-mkdir -p $OUT_DIR
-mkdir -p $TEMP_DIR
-echo "===== Program(${ID}) starts at \$(date) =====" >> $OUT_DIR/$ID.log
-nohup $EXEC_COMMAND >> $OUT_DIR/$ID.log 2>&1 & sleep 2
-pgrep -f "^$EXEC_COMMAND" | head -1 > $TEMP_DIR/$ID.pid
+# --- Termination Logic ---
+RUNNING_PID=$(cat $TEMP_DIR/$ID.pid 2>/dev/null)
+if [[ -n "$RUNNING_PID" ]]; then
+    echo "[Terminate_On_BG] Kill process using pid file (PID: $RUNNING_PID)"
+    kill -SIGTERM $RUNNING_PID || kill -9 $RUNNING_PID
+else
+    echo "[Terminate_On_BG] No process pid found."
+fi
+exit 0
