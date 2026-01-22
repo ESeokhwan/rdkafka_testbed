@@ -35,12 +35,12 @@ CLIENT_TEMP=""
 CONSUMER_EXEC=""
 PRODUCER_EXEC=""
 
+TERMINATE_TIMEOUT=60
+
 DURATION=100
 
 # NUM_CAR=(10 10 20 40 60 80 100 120 130 140 150)
 NUM_CAR=(10)
-
-TERMINATE_TIMEOUT=60
 
 VERBOSE=0
 HELP=0
@@ -78,9 +78,9 @@ CL_CLIENT_OUT=""
 CL_CLIENT_TEMP=""
 CL_CONSUMER_EXEC=""
 CL_PRODUCER_EXEC=""
+CL_TERMINATE_TIMEOUT=""
 CL_DURATION=""
 CL_NUM_CAR=()
-CL_TERMINATE_TIMEOUT=""
 CL_VERBOSE=""
 
 # Process arguments and store them in temporary variables
@@ -105,9 +105,9 @@ while true ; do
         --client-temp) CL_CLIENT_TEMP="$2" ; shift 2 ;;
         --consumer-exec) CL_CONSUMER_EXEC="$2" ; shift 2 ;;
         --producer-exec) CL_PRODUCER_EXEC="$2" ; shift 2 ;;
+        --terminate-timeout) CL_TERMINATE_TIMEOUT="$2" ; shift 2 ;;
         -d|--duration) CL_DURATION="$2" ; shift 2 ;;
         --num-car) IFS=',' read -r -a CL_NUM_CAR <<< "$2" ; shift 2 ;;
-        --terminate-timeout) CL_TERMINATE_TIMEOUT="$2" ; shift 2 ;;
         -v|--verbose) CL_VERBOSE=1 ; shift ;;
         -h|--help) HELP=1 ; shift ;;
         --) shift ; break ;;
@@ -222,11 +222,14 @@ fi
 if [ -n "$CL_PRODUCER_EXEC" ]; then
     PRODUCER_EXEC="$CL_PRODUCER_EXEC"
 fi
-if [ ${#CL_NUM_CAR[@]} -gt 0 ]; then
-    NUM_CAR=("${CL_NUM_CAR[@]}")
+if [ -n "$CL_TERMINATE_TIMEOUT" ]; then
+    TERMINATE_TIMEOUT="$CL_TERMINATE_TIMEOUT"
 fi
 if [ -n "$CL_DURATION" ]; then
     DURATION="$CL_DURATION"
+fi
+if [ ${#CL_NUM_CAR[@]} -gt 0 ]; then
+    NUM_CAR=("${CL_NUM_CAR[@]}")
 fi
 if [ -n "$CL_VERBOSE" ]; then
     VERBOSE="$CL_VERBOSE"
