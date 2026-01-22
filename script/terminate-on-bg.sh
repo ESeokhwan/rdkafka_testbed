@@ -15,7 +15,7 @@ CONFIG_FILE=""
 
 # --- Argument Parsing ---
 TEMP=$(getopt -o o:vh --longoptions \
-    config:,verbose,help,id:,temp-dir:timeout: \
+    config:,verbose,help,id:,temp-dir:,timeout: \
     -n 'myscript' -- "$@" \
 )
 
