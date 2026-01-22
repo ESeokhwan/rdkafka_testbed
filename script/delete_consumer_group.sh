@@ -130,7 +130,7 @@ running=0
 for ((i=START_IDX; i<START_IDX+COUNT; ++i)); do
     {
         group="$PREFIX$i"
-        $KAFKA_BIN_PATH/kafka-consumer-groups.sh --bootstrap-server "$BROKER" --delete --group "$group"
+        $KAFKA_BIN_PATH/kafka-consumer-groups.sh --bootstrap-server "$BROKER" --delete --group "$group" >> /dev/null 2>&1
         if [ $VERBOSE -eq 1 ]; then
             echo "[CG_DELETER] ✅ deleting $group" >&2
         fi
