@@ -402,7 +402,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
             --outdir $CLIENT_OUT --out_prefix "${CURRENT_CAR_NUM}C_" --no_log $VERBOSE_TAG
     echo "--------------------------------------------------"
 
-    GAURD_TIME=5
+    GAURD_TIME=3
     echo "${GAURD_TIME}초 대기 후 다음 작업 실행..."
     sleep $GAURD_TIME
     echo "--------------------------------------------------"
@@ -420,7 +420,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
         --running_time $DURATION_MS $VERBOSE_TAG
     echo "--------------------------------------------------"
 
-    GAURD_TIME=5
+    GAURD_TIME=3
     echo "${GAURD_TIME}초 대기 후 다음 작업 실행..."
     sleep $GAURD_TIME
     echo "--------------------------------------------------"
@@ -430,11 +430,6 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
     clean_up_consumer $CONSUMER_ID
     clean_up_r_consumer $R_CONSUMER_ID
     clean_up_connect $CONNECT_ID
-    echo "--------------------------------------------------"
-
-    GAURD_TIME=30
-    echo "${GAURD_TIME}초 대기 후 다음 작업 실행..."
-    sleep $GAURD_TIME
     echo "--------------------------------------------------"
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
