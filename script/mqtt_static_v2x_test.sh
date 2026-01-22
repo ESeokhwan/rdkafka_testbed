@@ -124,17 +124,17 @@ if [ "$HELP" -eq 1 ]; then
     echo "      --common-script-root <path>   Root directory where common script are located. (Default: .)"
     echo "      --connect-host <user@host>    Remote host for Connect execution. (Default: empty string for local)"
     echo "      --connect-root <path>         Root directory on remote host where Connect is located. (Default: ./connect)"
-    echo "      --connect-out <path>          Output rootectory for Connect logs. (Default: {connect_root}/out)"
-    echo "      --connect-temp <path>         Temporary rootectory for Connect files. (Default: {connect_root}/temp)"
+    echo "      --connect-out <path>          Output root directory for Connect logs. (Default: {connect_root}/out)"
+    echo "      --connect-temp <path>         Temporary root directory for Connect files. (Default: {connect_root}/temp)"
     echo "      --connect-exec <path>         Executable path for Connect. (Default: {connect_root}/bin/Connect)"
     echo "      --r-client-host <user@host>   Remote host for Remote Clients execution. (Default: empty string for local)"
     echo "      --r-client-root <path>        Root directory on remote host where Remote Client is located. (Default: client)"
-    echo "      --r-client-out <path>         Output rootectory for Remote Client logs. (Default: {r_client_root}/out)"
-    echo "      --r-client-temp <path>        Temporary rootectory for Remote Client files. (Default: {r_client_root}/temp)"
+    echo "      --r-client-out <path>         Output root directory for Remote Client logs. (Default: {r_client_root}/out)"
+    echo "      --r-client-temp <path>        Temporary root directory for Remote Client files. (Default: {r_client_root}/temp)"
     echo "      --r-consumer-exec <name>      Executable name for Remote Consumer. (Default: {r_client_root}/bin/vehicle)"
     echo "      --client-root <path>          Root directory where Client is located. (Default: ./client)"
-    echo "      --client-out <path>           Output rootectory for Client logs. (Default: {client_root}/out)"
-    echo "      --client-temp <path>          Temporary rootectory for Client files. (Default: {client_root}/temp)"
+    echo "      --client-out <path>           Output root directory for Client logs. (Default: {client_root}/out)"
+    echo "      --client-temp <path>          Temporary root directory for Client files. (Default: {client_root}/temp)"
     echo "      --consumer-exec <path>        Executable path for Local Consumer. (Default: {client_root}/bin/vehicle)"
     echo "      --producer-exec <path>        Executable path for Producer. (Default: {client_root}/bin/producer)"
     echo "  -d, --duration <seconds>          Duration for the test run. (Default: 100)"
@@ -375,7 +375,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
             --client_cnt -1 --running_time $INF_DURATION_MS \
             --outdir $R_CLIENT_OUT --out_prefix '${CURRENT_CAR_NUM}C_' $VERBOSE_TAG"
     if [ $R_CLIENT_HOST == "" ]; then
-       $R_CONSUMER_COMMAND
+        $R_CONSUMER_COMMAND
     else
         ssh $R_CLIENT_HOST $R_CONSUMER_COMMAND
     fi
@@ -387,9 +387,9 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
     $CLIENT_ROOT/script/run-on-bg.sh --id $CONSUMER_ID \
         --out-dir $CLIENT_OUT --temp-dir $CLIENT_TEMP $VERBOSE_TAG \
         --exec-path $CONSUMER_EXEC -- \
-            --broker $KAFKA_BROKER --group_prefix 'group_' \
+            --broker $KAFKA_BROKER --group_prefix "group_" \
             --client_cnt $CURRENT_CAR_NUM --running_time $INF_DURATION_MS \
-            --outdir $CLIENT_OUT --out_prefix '${CURRENT_CAR_NUM}C_' $VERBOSE_TAG
+            --outdir $CLIENT_OUT --out_prefix "${CURRENT_CAR_NUM}C_" $VERBOSE_TAG
     echo "--------------------------------------------------"
 
     GAURD_TIME=5
