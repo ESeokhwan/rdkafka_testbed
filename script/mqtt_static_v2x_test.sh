@@ -40,6 +40,8 @@ DURATION=100
 # NUM_CAR=(10 10 20 40 60 80 100 120 130 140 150)
 NUM_CAR=(10)
 
+TERMINATE_TIMEOUT=60
+
 VERBOSE=0
 HELP=0
 CONFIG_FILE=""
@@ -50,7 +52,7 @@ TEMP=$(getopt -o d:vh --longoptions \
     connect-host:, connect-root:, connect-out:, connect-temp:, connect-exec:, \
     r-client-host:, r-client-root:, r-client-out:, r-client-temp:, r-consumer-exec:, \
     client-root:, client-out:, client-temp:, consumer-exec:, producer-exec:, duration:, \
-    num-car:" \
+    num-car:, terminate-timeout:" \
     -n 'myscript' -- "$@" \
 )
 
@@ -78,6 +80,7 @@ CL_CONSUMER_EXEC=""
 CL_PRODUCER_EXEC=""
 CL_DURATION=""
 CL_NUM_CAR=()
+CL_TERMINATE_TIMEOUT=""
 CL_VERBOSE=""
 
 # Process arguments and store them in temporary variables
@@ -104,6 +107,7 @@ while true ; do
         --producer-exec) CL_PRODUCER_EXEC="$2" ; shift 2 ;;
         -d|--duration) CL_DURATION="$2" ; shift 2 ;;
         --num-car) IFS=',' read -r -a CL_NUM_CAR <<< "$2" ; shift 2 ;;
+        --terminate-timeout) CL_TERMINATE_TIMEOUT="$2" ; shift 2 ;;
         -v|--verbose) CL_VERBOSE=1 ; shift ;;
         -h|--help) HELP=1 ; shift ;;
         --) shift ; break ;;
@@ -137,6 +141,7 @@ if [ "$HELP" -eq 1 ]; then
     echo "      --client-temp <path>          Temporary root directory for Client files. (Default: {client_root}/temp)"
     echo "      --consumer-exec <path>        Executable path for Local Consumer. (Default: {client_root}/bin/vehicle)"
     echo "      --producer-exec <path>        Executable path for Producer. (Default: {client_root}/bin/producer)"
+    echo "      --terminate-timeout <timeout> Timeout second to wait before force killing (Default: 60)."
     echo "  -d, --duration <seconds>          Duration for the test run. (Default: 100)"
     echo "      --num-car <num1,num2,...>     Comma-separated list of car counts for the test. (Default: (10))"
     echo "  -v, --verbose                     Enable verbose output. (Config key: VERBOSE=1)"
@@ -229,7 +234,7 @@ fi
 
 # --- post-setup-defaults ---
 if [ -z "$CONNECT_OUT" ]; then
-  CONNECT_OUT=${CONNECT_ROOT}/out
+    CONNECT_OUT=${CONNECT_ROOT}/out
 fi
 if [ -z "$CONNECT_TEMP" ]; then
     CONNECT_TEMP=${CONNECT_ROOT}/temp
@@ -280,7 +285,9 @@ if [ "$VERBOSE" -eq 1 ]; then
     echo "Client Temp:            $CLIENT_TEMP"
     echo "Consumer Exec:          $CONSUMER_EXEC"
     echo "Producer Exec:          $PRODUCER_EXEC"
+    echo "Terminate Timeout:      $TERMINATE_TIMEOUT"
     echo "Duration:               $DURATION"
+    echo "Num Car:                $NUM_CAR"
     echo "Verbose Mode:           $VERBOSE"
     echo "--------------------------"
 
@@ -293,7 +300,7 @@ fi
 # clean up functions
 clean_up_connect() {
     IDENTIFIER=$1
-    CONNECT_COMMAND="$CONNECT_ROOT/script/terminate-on-bg.sh --id $IDENTIFIER --temp-dir $CONNECT_TEMP $VERBOSE_TAG"
+    CONNECT_COMMAND="$CONNECT_ROOT/script/terminate-on-bg.sh --id $IDENTIFIER --temp-dir $CONNECT_TEMP --timeout $TERMINATE_TIMEOUT VERBOSE_TAG"
     if [ $CONNECT_HOST == "" ]; then
         $CONNECT_COMMAND
     else
@@ -303,12 +310,12 @@ clean_up_connect() {
 
 clean_up_consumer() {
     IDENTIFIER=$1
-    $CLIENT_ROOT/script/terminate-on-bg.sh --id $IDENTIFIER --temp-dir $CLIENT_TEMP $VERBOSE_TAG
+    $CLIENT_ROOT/script/terminate-on-bg.sh --id $IDENTIFIER --temp-dir $CLIENT_TEMP --timeout $TERMINATE_TIMEOUT VERBOSE_TAG
 }
 
 clean_up_r_consumer() {
     IDENTIFIER=$1
-    R_CONSUMER_COMMAND="$R_CLIENT_ROOT/script/terminate-on-bg.sh --id $IDENTIFIER --temp-dir $R_CLIENT_TEMP $VERBOSE_TAG"
+    R_CONSUMER_COMMAND="$R_CLIENT_ROOT/script/terminate-on-bg.sh --id $IDENTIFIER --temp-dir $R_CLIENT_TEMP --timeout $TERMINATE_TIMEOUT VERBOSE_TAG"
     if [ $R_CLIENT_HOST == "" ]; then
         $R_CONSUMER_COMMAND
     else
