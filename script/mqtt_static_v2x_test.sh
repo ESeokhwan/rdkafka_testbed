@@ -293,7 +293,7 @@ fi
 # clean up functions
 clean_up_connect() {
     IDENTIFIER=$1
-    CONNECT_COMMAND="$CONNECT_ROOT/script/run-on-bg.sh --id $IDENTIFIER --terminate --out-dir $CONNECT_OUT --temp-dir $CONNECT_TEMP $VERBOSE_TAG"
+    CONNECT_COMMAND="$CONNECT_ROOT/script/terminate-on-bg.sh --id $IDENTIFIER --temp-dir $CONNECT_TEMP $VERBOSE_TAG"
     if [ $CONNECT_HOST == "" ]; then
         $CONNECT_COMMAND
     else
@@ -303,15 +303,15 @@ clean_up_connect() {
 
 clean_up_consumer() {
     IDENTIFIER=$1
-    $CLIENT_ROOT/script/run-on-bg.sh --id $IDENTIFIER --terminate --out-dir $CLIENT_OUT --temp-dir $CLIENT_TEMP $VERBOSE_TAG
+    $CLIENT_ROOT/script/terminate-on-bg.sh --id $IDENTIFIER --temp-dir $CLIENT_TEMP $VERBOSE_TAG
 }
 
 clean_up_r_consumer() {
     IDENTIFIER=$1
-    R_CONSUMER_COMMAND="$R_CLIENT_ROOT/script/run-on-bg.sh --id $IDENTIFIER --terminate --out-dir $R_CLIENT_OUT --temp-dir $R_CLIENT_TEMP $VERBOSE_TAG"
+    R_CONSUMER_COMMAND="$R_CLIENT_ROOT/script/terminate-on-bg.sh --id $IDENTIFIER --temp-dir $R_CLIENT_TEMP $VERBOSE_TAG"
     if [ $R_CLIENT_HOST == "" ]; then
         $R_CONSUMER_COMMAND
-    else 
+    else
         ssh $R_CLIENT_HOST $R_CONSUMER_COMMAND
     fi
 }
@@ -354,7 +354,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
         --exec-path $CONNECT_EXEC 1"
     if [ $CONNECT_HOST == "" ]; then
         $CONNECT_COMMAND
-    else 
+    else
         ssh $CONNECT_HOST $CONNECT_COMMAND
     fi
     echo "--------------------------------------------------"
@@ -376,7 +376,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
             --outdir $R_CLIENT_OUT --out_prefix '${CURRENT_CAR_NUM}C_' $VERBOSE_TAG"
     if [ $R_CLIENT_HOST == "" ]; then
        $R_CONSUMER_COMMAND
-    else 
+    else
         ssh $R_CLIENT_HOST $R_CONSUMER_COMMAND
     fi
     echo "--------------------------------------------------"
