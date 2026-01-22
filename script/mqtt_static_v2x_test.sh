@@ -399,7 +399,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
         --exec-path $CONSUMER_EXEC -- \
             --broker $KAFKA_BROKER --group_prefix "group_" \
             --client_cnt $CURRENT_CAR_NUM --running_time $INF_DURATION_MS \
-            --outdir $CLIENT_OUT --out_prefix "${CURRENT_CAR_NUM}C_" $VERBOSE_TAG
+            --outdir $CLIENT_OUT --out_prefix "${CURRENT_CAR_NUM}C_" --no_log $VERBOSE_TAG
     echo "--------------------------------------------------"
 
     GAURD_TIME=5

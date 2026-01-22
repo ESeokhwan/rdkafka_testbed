@@ -20,6 +20,7 @@ enum class LongOnlyOptionVals {
     IS_SYNC,
     SCRAPABLE,
     TAG_RECORD,
+    NO_LOG,
     READ_TAGGED_ONLY,
     SAMPLE_LOG,
     TOPIC_CNT_PER_CLIENT,
@@ -130,6 +131,7 @@ constexpr OptionWrapper NEED_FLUSH_OPTION = {"need_flush", no_argument, nullptr,
 constexpr OptionWrapper IGNORE_RESPONSE_OPTION = {"ignore_response", no_argument, nullptr, static_cast<int>(LongOnlyOptionVals::IGNORE_RESPONSE), "Ignore response"};
 constexpr OptionWrapper IS_SYNC_OPTION = {"is_sync", no_argument, nullptr, static_cast<int>(LongOnlyOptionVals::IS_SYNC), "Enable synchronous mode"};
 constexpr OptionWrapper SCRAPABLE_OPTION = {"scrapable", no_argument, nullptr, static_cast<int>(LongOnlyOptionVals::SCRAPABLE), "Enable scrapable mode"};
+constexpr OptionWrapper NO_LOG_OPTION = {"no_log", no_argument, nullptr, static_cast<int>(LongOnlyOptionVals::NO_LOG), "Disable monitoring log"};
 constexpr OptionWrapper TAG_RECORD_OPTION = {"tag_record", no_argument, nullptr, static_cast<int>(LongOnlyOptionVals::TAG_RECORD), "Enable record tagging"};
 constexpr OptionWrapper READ_TAGGED_ONLY_OPTION = {"read_tagged_only", no_argument, nullptr, static_cast<int>(LongOnlyOptionVals::READ_TAGGED_ONLY), "Read tagged records only"};
 constexpr OptionWrapper SAMPLE_LOG_OPTION = {"sample_log", no_argument, nullptr, static_cast<int>(LongOnlyOptionVals::SAMPLE_LOG), "Enable log sampling"};

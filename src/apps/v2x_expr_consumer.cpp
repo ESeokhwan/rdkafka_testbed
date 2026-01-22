@@ -30,6 +30,7 @@ struct Arguments {
     int running_time;
 
     bool scrapable;
+    bool log_disabled;
     bool read_tagged_only;
     bool verbose;
 
@@ -52,6 +53,7 @@ struct ConsumerThreadArg {
     latch *start_signal;
     atomic<bool> *end_flag;
 
+    bool log_disabled;
     bool read_tagged_only;
     bool verbose;
 };
@@ -122,6 +124,7 @@ int main(int argc, char *argv[]) {
             << "Running Time: " << args.running_time << "\n"
             << "Start Barrier Delay: " << args.start_barrier_delay << "\n"
             << "Scrapable: " << (args.scrapable ? "on" : "off") << "\n"
+            << "No logging: " << (args.log_disabled ? "on" : "off") << "\n"
             << "Log Sampling: " << (args.read_tagged_only ? "on" : "off") << "\n"
             << "Output Directory: " << args.outdir
             << "Output File Prefix: " << args.out_prefix << endl;
@@ -171,6 +174,7 @@ void V2xExprConsumerApp::init_clients() {
         consumer_thread_args[i].start_signal = &start_signal;
         consumer_thread_args[i].end_flag = &end_flag;
         consumer_thread_args[i].verbose = args.verbose;
+        consumer_thread_args[i].log_disabled = args.log_disabled;
         consumer_thread_args[i].read_tagged_only = args.read_tagged_only;
         consumer_thread_args[i].monitor_queue = monitor_queue;
         consumer_thread_args[i].writer = writer;
@@ -256,6 +260,7 @@ void consume_run(struct ConsumerThreadArg *arg) {
     while (!arg->end_flag->load(memory_order_acquire)) {
         optional<string> plain_msg_opt = consumer::consume_message(consumer.get(), 1);
         if (!plain_msg_opt.has_value()) continue;
+        if (arg->log_disabled) continue;
         arg->monitor_queue->enqueue(
             make_unique<monitor::StatSumMonitorLog>(
                 plain_msg_opt.value(), "Responded", util::get_current_timestamp()
@@ -282,6 +287,7 @@ Arguments parse_arguments(int argc, char** argv) {
     args.outdir = "";
     args.out_prefix = "";
     args.scrapable = false;
+    args.log_disabled = false;
     args.read_tagged_only = false;
     args.verbose = false;
 
@@ -294,6 +300,7 @@ Arguments parse_arguments(int argc, char** argv) {
         util::RUNNING_TIME_OPTION,
         util::START_BARRIER_DELAY_OPTION,
         util::SCRAPABLE_OPTION,
+        util::NO_LOG_OPTION,
         util::READ_TAGGED_ONLY_OPTION,
         util::OUTDIR_OPTION,
         util::OUT_PREFIX_OPTION,
@@ -312,6 +319,7 @@ Arguments parse_arguments(int argc, char** argv) {
             case util::RUNNING_TIME_OPTION.get_val(): args.running_time = atoi(optarg); break;
             case util::START_BARRIER_DELAY_OPTION.get_val(): args.start_barrier_delay = atoi(optarg); break;
             case util::SCRAPABLE_OPTION.get_val(): args.scrapable = true; break;
+            case util::NO_LOG_OPTION.get_val(): args.log_disabled = true; break;
             case util::READ_TAGGED_ONLY_OPTION.get_val(): args.read_tagged_only = true; break;
             case util::OUTDIR_OPTION.get_val(): args.outdir = optarg; break;
             case util::OUT_PREFIX_OPTION.get_val(): args.out_prefix = optarg; break;
