@@ -28,7 +28,9 @@ find_package(unofficial-mosquitto CONFIG REQUIRED)
 
 add_subdirectory(libmoniq)
 
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--disable-new-dtags")
+if (NOT APPLE)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--disable-new-dtags")
+endif()
 set(CMAKE_SKIP_BUILD_RPATH FALSE)
 set(CMAKE_BUILD_RPATH "${PROJECT_SOURCE_DIR}/librdkafka/install/lib")
 

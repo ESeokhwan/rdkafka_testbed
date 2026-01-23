@@ -4,7 +4,7 @@
     {
       "name": "base",
       "hidden": true,
-      "binaryDir": "${sourceDir}/build/${presetName}"
+      "binaryDir": "${sourceDir}/build"
     },
     {
       "name": "win-x64-debug",
@@ -65,6 +65,26 @@
         "CMAKE_BUILD_TYPE": "Release",
         "VCPKG_TARGET_TRIPLET": "x64-osx"
       }
+    },
+    {
+      "name": "macos-arm64-debug",
+      "displayName": "macOS ARM64 Debug",
+      "inherits": "base",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin" },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "VCPKG_TARGET_TRIPLET": "arm64-osx"
+      }
+    },
+    {
+      "name": "macos-arm64-release",
+      "displayName": "macOS ARM64 Release",
+      "inherits": "base",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin" },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "VCPKG_TARGET_TRIPLET": "arm64-osx"
+      }
     }
   ],
   "buildPresets": [
@@ -91,6 +111,14 @@
     {
       "name": "macos-release",
       "configurePreset": "macos-release"
+    },
+    {
+      "name": "macos-arm64-debug",
+      "configurePreset": "macos-arm64-debug"
+    },
+    {
+      "name": "macos-arm64-release",
+      "configurePreset": "macos-arm64-release"
     }
   ]
 }

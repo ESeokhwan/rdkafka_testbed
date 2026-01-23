@@ -4,6 +4,7 @@
 #include "util/time_util.h"
 
 #include <chrono>
+#include <thread>
 #include <mosquitto.h>
 #include <stdexcept>
 
@@ -43,7 +44,7 @@ MosqProducerService::MosqProducerService(
     std::shared_ptr<moniq::MonitorQueue> &monitor_queue,
     std::shared_ptr<moniq::writer::MonitorLogWriter> &writer
 ): AbstractService(
-    round_cnt, interval, 
+    round_cnt, interval,
     util::generate_noises(
         interval_noise_stddev, interval_max_abs_noise,
         std::min(round_cnt, util::MAX_NOISE_LIST_LENGTH), rng)
@@ -68,7 +69,7 @@ MosqProducerService::MosqProducerService(
     std::shared_ptr<moniq::MonitorQueue> &monitor_queue,
     std::shared_ptr<moniq::writer::MonitorLogWriter> &writer
 ): AbstractService(
-    round_cnt, interval, 
+    round_cnt, interval,
     util::generate_noises(
         interval_noise_stddev, interval_max_abs_noise,
         std::min(round_cnt, util::MAX_NOISE_LIST_LENGTH), rng)
@@ -94,7 +95,7 @@ void MosqProducerService::work() {
             core_msg, "REQUEST", requested_at));
         writer->notify_if_needed();
     }
-    int rc = mosquitto_publish(this->mosq_client, nullptr, 
+    int rc = mosquitto_publish(this->mosq_client, nullptr,
         topic_name.c_str(), msg.size(), msg.c_str(), 0, false);
     if (rc != MOSQ_ERR_SUCCESS) {
         throw std::runtime_error("Publish failed for " + topic_name + ": " + mosquitto_strerror(rc));
