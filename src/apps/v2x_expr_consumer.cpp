@@ -175,10 +175,11 @@ void V2xExprConsumerApp::init_clients() {
     consumer_thread_args.resize(client_cnt);
     client_threads.reserve(client_cnt);
     vector<int> assigned_idx = assign_services(client_cnt, service_args.size());
-    for (int i = args.start_idx; i < args.start_idx + client_cnt; i++) {
+    for (int i = 0; i < client_cnt; i++) {
+        int cur_idx = args.start_idx + i;
         consumer_thread_args[i].broker = args.broker;
-        consumer_thread_args[i].group_id = args.group_prefix + to_string(i);
-        consumer_thread_args[i].client_id = args.topic_prefix + service_args[assigned_idx[i]].name + "_" + to_string(i);
+        consumer_thread_args[i].group_id = args.group_prefix + to_string(cur_idx);
+        consumer_thread_args[i].client_id = args.topic_prefix + service_args[assigned_idx[i]].name + "_" + to_string(cur_idx);
         consumer_thread_args[i].topics.push_back(args.topic_prefix + service_args[assigned_idx[i]].name);
         consumer_thread_args[i].start_signal = &start_signal;
         consumer_thread_args[i].end_flag = &end_flag;
