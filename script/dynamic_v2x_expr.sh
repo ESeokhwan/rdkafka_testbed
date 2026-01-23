@@ -455,7 +455,7 @@ sleep $FINAL_HOLD
 echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-echo "[6/7] 순차적 종료 시작 ($TIMESTAMP): ${STEP_INTERVAL*$NUM_STEPS}s 후에 모든 프로세스 종료"
+echo "[6/7] 순차적 종료 시작 ($TIMESTAMP): $((STEP_INTERVAL*$NUM_STEPS))s 후에 모든 프로세스 종료"
 sleep $((STEP_INTERVAL * NUM_STEPS))
 echo "--------------------------------------------------"
 
