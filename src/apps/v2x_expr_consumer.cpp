@@ -29,6 +29,7 @@ struct Arguments {
     string group_prefix;
     string topic_prefix;
     int client_cnt;
+    int start_idx;
     int running_time;
 
     bool scrapable;
@@ -127,6 +128,7 @@ int main(int argc, char *argv[]) {
             << "Group Prefix: " << args.group_prefix << "\n"
             << "Topic Prefix: " << args.topic_prefix << "\n"
             << "Client Count: " << args.client_cnt << "\n"
+            << "Start Index: " << args.start_idx << "\n"
             << "Running Time: " << args.running_time << "\n"
             << "Start Barrier Delay: " << args.start_barrier_delay << "\n"
             << "Scrapable: " << (args.scrapable ? "on" : "off") << "\n"
@@ -173,7 +175,7 @@ void V2xExprConsumerApp::init_clients() {
     consumer_thread_args.resize(client_cnt);
     client_threads.reserve(client_cnt);
     vector<int> assigned_idx = assign_services(client_cnt, service_args.size());
-    for (int i = 0; i < client_cnt; i++) {
+    for (int i = args.start_idx; i < args.start_idx + client_cnt; i++) {
         consumer_thread_args[i].broker = args.broker;
         consumer_thread_args[i].group_id = args.group_prefix + to_string(i);
         consumer_thread_args[i].client_id = args.topic_prefix + service_args[assigned_idx[i]].name + "_" + to_string(i);
@@ -291,6 +293,7 @@ Arguments parse_arguments(int argc, char** argv) {
     args.group_prefix="";
     args.topic_prefix="";
     args.client_cnt = 1;
+    args.start_idx = 0;
     args.running_time = 10;
     args.start_barrier_delay = 2;
     args.outdir = "";
@@ -306,6 +309,7 @@ Arguments parse_arguments(int argc, char** argv) {
         util::GROUP_PREFIX_OPTION,
         util::TOPIC_PREFIX_OPTION,
         util::CLIENT_CNT_OPTION,
+        util::START_IDX_OPTION,
         util::RUNNING_TIME_OPTION,
         util::START_BARRIER_DELAY_OPTION,
         util::SCRAPABLE_OPTION,
@@ -325,6 +329,7 @@ Arguments parse_arguments(int argc, char** argv) {
             case util::GROUP_PREFIX_OPTION.get_val(): args.group_prefix = optarg; break;
             case util::TOPIC_PREFIX_OPTION.get_val(): args.topic_prefix = optarg; break;
             case util::CLIENT_CNT_OPTION.get_val(): args.client_cnt = atoi(optarg); break;
+            case util::START_IDX_OPTION.get_val(): args.start_idx = atoi(optarg); break;
             case util::RUNNING_TIME_OPTION.get_val(): args.running_time = atoi(optarg); break;
             case util::START_BARRIER_DELAY_OPTION.get_val(): args.start_barrier_delay = atoi(optarg); break;
             case util::SCRAPABLE_OPTION.get_val(): args.scrapable = true; break;

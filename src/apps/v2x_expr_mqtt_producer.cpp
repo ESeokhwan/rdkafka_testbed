@@ -33,6 +33,7 @@ struct Arguments {
     string client_prefix;
     string topic_prefix;
     int client_cnt;
+    int start_idx;
     int running_time;
 
     double interval_noise_stddev_rate;
@@ -114,6 +115,7 @@ int main(int argc, char *argv[]) {
             << "Client Prefix: " << args.client_prefix << "\n"
             << "Topic Prefix: " << args.topic_prefix << "\n"
             << "Client Count: " << args.client_cnt << "\n"
+            << "Start Index: " << args.start_idx << "\n"
             << "Running Time: " << args.running_time << "\n"
             << "Interval Noise Stddev Rate: " << args.interval_noise_stddev_rate << "\n"
             << "Warmup Count: " << args.warmup_cnt << "\n"
@@ -148,7 +150,7 @@ void V2xMqttExprProducerApp::run() {
 }
 
 void V2xMqttExprProducerApp::init_clients() {
-    for (int i = 0; i < args.client_cnt; i++) {
+    for (int i = args.start_idx; i < args.start_idx + args.client_cnt; i++) {
         vector<shared_ptr<IService>> services;
         mosquitto *mosq_client = producer::MosqProducerService::create_mosq_client(
             args.broker, args.client_prefix + to_string(i));
@@ -245,6 +247,7 @@ Arguments parse_arguments(int argc, char** argv) {
     args.client_prefix = "";
     args.topic_prefix = "";
     args.client_cnt = 1;
+    args.start_idx = 0;
     args.running_time = 10;
     args.interval_noise_stddev_rate = 0.0;
     args.warmup_cnt = 0;
@@ -260,6 +263,7 @@ Arguments parse_arguments(int argc, char** argv) {
         util::CLIENT_PREFIX_OPTION,
         util::TOPIC_PREFIX_OPTION,
         util::CLIENT_CNT_OPTION,
+        util::START_IDX_OPTION,
         util::RUNNING_TIME_OPTION,
         util::INTERVAL_NOISE_STDDEV_RATE_OPTION,
         util::WARMUP_CNT_OPTION,
@@ -280,6 +284,7 @@ Arguments parse_arguments(int argc, char** argv) {
             case util::CLIENT_PREFIX_OPTION.get_val(): args.client_prefix = optarg; break;
             case util::TOPIC_PREFIX_OPTION.get_val(): args.topic_prefix = optarg; break;
             case util::CLIENT_CNT_OPTION.get_val(): args.client_cnt = atoi(optarg); break;
+            case util::START_IDX_OPTION.get_val(): args.start_idx = atoi(optarg); break;
             case util::RUNNING_TIME_OPTION.get_val(): args.running_time = atoi(optarg); break;
             case util::INTERVAL_NOISE_STDDEV_RATE_OPTION.get_val(): args.interval_noise_stddev_rate = atof(optarg); break;
             case util::WARMUP_CNT_OPTION.get_val(): args.warmup_cnt = atoi(optarg); break;

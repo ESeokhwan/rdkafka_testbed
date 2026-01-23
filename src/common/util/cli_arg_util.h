@@ -24,6 +24,7 @@ enum class LongOnlyOptionVals {
     READ_TAGGED_ONLY,
     SAMPLE_LOG,
     TOPIC_CNT_PER_CLIENT,
+    START_IDX,
     INTERVAL_NOISE_STDDEV,
     INTERVAL_NOISE_STDDEV_RATE,
     INTERVAL_BTW_TOPIC,
@@ -119,6 +120,8 @@ constexpr OptionWrapper OUT_PREFIX_OPTION = {"out_prefix", required_argument, nu
 constexpr OptionWrapper CLIENT_CNT_OPTION = {"client_cnt", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::CLIENT_CNT), "Number of clients"};
 constexpr OptionWrapper SERVICE_CNT_OPTION = {"service_cnt", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::SERVICE_CNT), "Number of services"};
 constexpr OptionWrapper TOPIC_CNT_PER_CLIENT_OPTION = {"topic_cnt_per_client", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::TOPIC_CNT_PER_CLIENT), "Number of topics per client"};
+
+constexpr OptionWrapper START_IDX_OPTION = {"start_idx", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::START_IDX), "Start index"};
 
 constexpr OptionWrapper NOISE_STDDEV_OPTION = {"noise_stddev", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::NOISE_STDDEV), "Noise standard deviation"};
 constexpr OptionWrapper INTERVAL_NOISE_STDDEV_OPTION = {"interval_noise_stddev", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::INTERVAL_NOISE_STDDEV), "Interval noise standard deviation"};
