@@ -7,9 +7,9 @@ namespace common {
 namespace monitor {
 
 StatSumMonitorLog::StatSumMonitorLog(
-    moniq::adaptor::ILatencyMonitoringMessageAdaptor *message_adaptor,
+    common::monitor::IStatSumMonitorMessageAdaptor *message_adaptor,
     const std::string& raw_data, const std::string& status, double responded_at
-): moniq::JsonBasedLatencyMonitorLog(message_adaptor, raw_data, status, responded_at) {}
+): moniq::JsonBasedLatencyMonitorLog(message_adaptor, raw_data, status, responded_at), message_adaptor(message_adaptor) {}
 
 std::vector<std::string> StatSumMonitorLog::get_headers() const {
         return { "Service", "Content", "Status", "RequestedAt", "RespondedAt", "Latency" };
@@ -24,8 +24,7 @@ std::vector<std::string> StatSumMonitorLog::get_values() const {
 
 void StatSumMonitorLog::preprocess() {
     moniq::JsonBasedLatencyMonitorLog::preprocess();
-    common::monitor::ExtractOnlyStatSumMonitorMessageAdaptor message_adaptor;
-    extracted_service_ = message_adaptor.extract_service_name(get_raw_data());
+    extracted_service_ = message_adaptor->extract_service_name(get_raw_data());
 }
 
 std::string StatSumMonitorLog::get_service() const {

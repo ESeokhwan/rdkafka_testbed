@@ -1,4 +1,5 @@
 #include "abstract_application.h"
+#include "monitor/stat_sum_monitor_message_adaptor.h"
 #include "util/cli_arg_util.h"
 #include "util/time_util.h"
 #include "consumer/consumer_util.h"
@@ -50,7 +51,7 @@ struct ConsumerThreadArg {
 
     shared_ptr<moniq::MonitorQueue> monitor_queue;
     shared_ptr<moniq::writer::MonitorLogWriter> writer;
-    shared_ptr<moniq::adaptor::ILatencyMonitoringMessageAdaptor> message_adaptor;
+    shared_ptr<common::monitor::IStatSumMonitorMessageAdaptor> message_adaptor;
 
     latch *start_signal;
     atomic<bool> *end_flag;
@@ -78,7 +79,7 @@ private:
 
     atomic<bool> end_flag;
 
-    shared_ptr<moniq::adaptor::ILatencyMonitoringMessageAdaptor> message_adaptor;
+    shared_ptr<common::monitor::IStatSumMonitorMessageAdaptor> message_adaptor;
 
     void init_clients();
     void wait_for_running_time();
@@ -88,7 +89,7 @@ public:
     V2xExprConsumerApp(
         shared_ptr<moniq::MonitorQueue> &monitor_queue,
         shared_ptr<moniq::writer::MonitorLogWriter> &writer,
-        shared_ptr<moniq::adaptor::ILatencyMonitoringMessageAdaptor> &message_adaptor,
+        shared_ptr<common::monitor::IStatSumMonitorMessageAdaptor> &message_adaptor,
         Arguments args,
         vector<struct ServiceArg> &service_args
     ): AbstractApplication(monitor_queue, writer), args(args), service_args(service_args), message_adaptor(message_adaptor) {
@@ -146,7 +147,7 @@ int main(int argc, char *argv[]) {
     shared_ptr<moniq::writer::IMonitorLogWriteStrategy> write_strategy =
         make_shared<monitor::StatSumPerSecMonitorLogWriteStrategy>(generate_services(service_args, args.outdir, args.out_prefix));
     shared_ptr<moniq::writer::MonitorLogWriter> writer = make_shared<moniq::writer::MonitorLogWriter>(monitor_queue, write_strategy, -1, -1);
-    shared_ptr<moniq::adaptor::ILatencyMonitoringMessageAdaptor> message_adaptor = make_shared<moniq::adaptor::FastExtractOnlyJsonBasedLatencyMonitoringMessageAdaptor>();
+    shared_ptr<common::monitor::IStatSumMonitorMessageAdaptor> message_adaptor = make_shared<common::monitor::ExtractOnlyStatSumMonitorMessageAdaptor>();
 
     app = new V2xExprConsumerApp(monitor_queue, writer, message_adaptor, args, service_args);
     signal(SIGINT, interrupt_handler);
@@ -184,6 +185,7 @@ void V2xExprConsumerApp::init_clients() {
         consumer_thread_args[i].read_tagged_only = args.read_tagged_only;
         consumer_thread_args[i].monitor_queue = monitor_queue;
         consumer_thread_args[i].writer = writer;
+        consumer_thread_args[i].message_adaptor = message_adaptor;
         client_threads.emplace_back(consume_run, &consumer_thread_args[i]);
     }
 }

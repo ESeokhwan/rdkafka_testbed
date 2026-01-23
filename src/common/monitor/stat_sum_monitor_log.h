@@ -1,17 +1,19 @@
 #pragma once
 
+#include "monitor/stat_sum_monitor_message_adaptor.h"
+
 #include <libmoniq/latency_monitor_log.h>
-#include <libmoniq/adaptor/latency_monitoring_message_adaptor.h>
 
 namespace common {
 namespace monitor {
 
 class StatSumMonitorLog: public moniq::JsonBasedLatencyMonitorLog {
 private:
+    common::monitor::IStatSumMonitorMessageAdaptor *message_adaptor;
     std::optional<std::string> extracted_service_;
 
 public:
-    StatSumMonitorLog(moniq::adaptor::ILatencyMonitoringMessageAdaptor *message_adaptor, const std::string& raw_data, const std::string& status, double responded_at);
+    StatSumMonitorLog(common::monitor::IStatSumMonitorMessageAdaptor *message_adaptor, const std::string& raw_data, const std::string& status, double responded_at);
     ~StatSumMonitorLog() = default;
 
     std::vector<std::string> get_headers() const override;
