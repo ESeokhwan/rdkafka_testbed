@@ -332,7 +332,7 @@ start_load_consumers() {
             --broker $KAFKA_BROKER --group_prefix "group_" \
             --client_cnt $((to-from)) --start_idx $from --running_time $INF_DURATION \
             --outdir $CLIENT_OUT --out_prefix "${from}_${to}C_" --no_log \
-            --start_barrier_delay 1 $VERBOSE_TAG
+            --start_barrier_delay 1 $VERBOSE_TAG &
     LOAD_CONSUMER_IDS+=("$load_consumer_id")
 }
 
@@ -346,7 +346,7 @@ start_producers() {
         --exec-path $PRODUCER_EXEC -- \
             --broker $MQTT_BROKER --client_cnt $((to-from)) --start_idx $from \
             --running_time $INF_DURATION --start_barrier_delay 1 \
-            --interval_noise_stddev_rate $INTERVAL_NOISE_RATE $VERBOSE_TAG
+            --interval_noise_stddev_rate $INTERVAL_NOISE_RATE $VERBOSE_TAG &
     PRODUCER_IDS+=("$producer_id")
 }
 
