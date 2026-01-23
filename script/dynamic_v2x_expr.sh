@@ -41,6 +41,8 @@ STEP_CARS=(10 20 30 40 50 60 70 80 90 100 110 120)
 STEP_INTERVAL=5
 FINAL_HOLD=20
 
+INTERVAL_NOISE_STDDEV_RATE=0
+
 VERBOSE=0
 HELP=0
 CONFIG_FILE=""
@@ -51,7 +53,7 @@ TEMP=$(getopt -o d:vh --longoptions \
     connect-host:, connect-root:, connect-out:, connect-temp:, connect-exec:, \
     r-client-host:, r-client-root:, r-client-out:, r-client-temp:, r-consumer-exec:, \
     client-root:, client-out:, client-temp:, consumer-exec:, producer-exec:, step-cars:, \
-    step-interval:, final-hold:, terminate-timeout:" \
+    step-interval:, final-hold:, interval-noise-stddev-rate:, terminate-timeout:" \
     -n 'myscript' -- "$@" \
 )
 
@@ -81,6 +83,7 @@ CL_TERMINATE_TIMEOUT=""
 CL_STEP_CARS=()
 CL_STEP_INTERVAL=""
 CL_FINAL_HOLD=""
+CL_INTERVAL_NOISE_STDDEV_RATE=""
 CL_VERBOSE=""
 
 # Process arguments and store them in temporary variables
@@ -109,6 +112,7 @@ while true ; do
         --step-cars) IFS=',' read -r -a CL_STEP_CARS <<< "$2" ; shift 2 ;;
         --step-interval) CL_STEP_INTERVAL="$2" ; shift 2 ;;
         --final-hold) CL_FINAL_HOLD="$2" ; shift 2 ;;
+        --interval-noise-stddev-rate) CL_INTERVAL_NOISE_STDDEV_RATE="$2" ; shift 2 ;;
         -v|--verbose) CL_VERBOSE=1 ; shift ;;
         -h|--help) HELP=1 ; shift ;;
         --) shift ; break ;;
@@ -146,6 +150,7 @@ if [ "$HELP" -eq 1 ]; then
     echo "      --step-cars <num1,num2,...>   Comma-separated list of total car counts for each scaling step. (Default: (10,20,30,40,50,60,70,80,90,100,110,120))"
     echo "      --step-interval <seconds>     Interval in seconds between each scaling step. (Default: 5)"
     echo "      --final-hold <seconds>        Hold time in seconds after reaching final scale before termination. (Default: 20)"
+    echo "      --interval-noise-stddev-rate <n>  Standard deviation of noise to add to produce interval (Default: 0)"
     echo "  -v, --verbose                     Enable verbose output. (Config key: VERBOSE=1)"
     echo "  -h, --help                        Display this help message and exit."
     echo ""
@@ -236,6 +241,9 @@ fi
 if [ -n "$CL_FINAL_HOLD" ]; then
     FINAL_HOLD="$CL_FINAL_HOLD"
 fi
+if [ -n "$CL_INTERVAL_NOISE_STDDEV_RATE" ]; then
+    INTERVAL_NOISE_STDDEV_RATE="$CL_INTERVAL_NOISE_STDDEV_RATE"
+fi
 if [ -n "$CL_VERBOSE" ]; then
     VERBOSE="$CL_VERBOSE"
 fi
@@ -297,6 +305,7 @@ if [ "$VERBOSE" -eq 1 ]; then
     echo "Step Cars:              $STEP_CARS"
     echo "Step Interval:          $STEP_INTERVAL"
     echo "Final Hold:             $FINAL_HOLD"
+    echo "Interval Noise Stdard Deviation Rate:  $INTERVAL_NOISE_STDDEV_RATE"
     echo "Verbose Mode:           $VERBOSE"
     echo "--------------------------"
 
@@ -332,7 +341,8 @@ start_producers() {
         --out-dir $CLIENT_OUT --temp-dir $CLIENT_TEMP $VERBOSE_TAG \
         --exec-path $PRODUCER_EXEC -- \
             --broker $MQTT_BROKER --client_cnt $((to-from)) --start_idx $from \
-            --running_time $running_time --start_barrier_delay 1 $VERBOSE_TAG
+            --running_time $running_time --start_barrier_delay 1 \
+            --interval_noise_stddev_rate $INTERVAL_NOISE_STDDEV_RATE $VERBOSE_TAG
     PRODUCER_IDS+=("$producer_id")
 }
 
@@ -456,7 +466,7 @@ echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 echo "[6/7] 순차적 종료 시작 ($TIMESTAMP): $((STEP_INTERVAL*$NUM_STEPS))s 후에 모든 프로세스 종료"
-sleep $((STEP_INTERVAL * NUM_STEPS))
+sleep $((STEP_INTERVAL * NUM_STEPS + 10))
 echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
