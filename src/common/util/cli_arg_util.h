@@ -110,7 +110,7 @@ constexpr OptionWrapper INTERVAL_OPTION = {"interval", required_argument, nullpt
 
 constexpr OptionWrapper MSG_SIZE_OPTION = {"msg_size", required_argument, nullptr, 'm', "Message size in bytes"};
 
-constexpr OptionWrapper RUNNING_TIME_OPTION = {"running_time", required_argument, nullptr, 'r', "Running time (ms)"};
+constexpr OptionWrapper RUNNING_TIME_OPTION = {"running_time", required_argument, nullptr, 'r', "Running time (seconds)"};
 
 constexpr OptionWrapper OUTDIR_OPTION = {"outdir", required_argument, nullptr, 'o', "Output directory"};
 constexpr OptionWrapper OUT_PREFIX_OPTION = {"out_prefix", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::OUT_PREFIX), "Prefix for output files"};
@@ -139,7 +139,7 @@ constexpr OptionWrapper SAMPLE_LOG_OPTION = {"sample_log", no_argument, nullptr,
 constexpr OptionWrapper WARMUP_CNT_OPTION = {"warmup_cnt", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::WARMUP_CNT), "Number of messages for warmup"};
 constexpr OptionWrapper WARMUP_TOPIC_OPTION = {"warmup_topic", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::WARMUP_TOPIC), "Warmup topic"};
 
-constexpr OptionWrapper START_BARRIER_DELAY_OPTION = {"start_barrier_delay", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::START_BARRIER_DELAY), "Start barrier delay (ms)"};
+constexpr OptionWrapper START_BARRIER_DELAY_OPTION = {"start_barrier_delay", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::START_BARRIER_DELAY), "Start barrier delay (seconds)"};
 constexpr OptionWrapper MONITORING_BATCH_SIZE_OPTION = {"monitoring_batch_size", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::MONITORING_BATCH_SIZE), "Monitoring batch size"};
 
 constexpr OptionWrapper SERVICE_RUNNER_POOL_SIZE_OPTION = {"service_runner_pool_size", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::SERVICE_RUNNER_POOL_SIZE), "Service runner pool size"};

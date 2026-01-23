@@ -141,7 +141,7 @@ if [ "$HELP" -eq 1 ]; then
     echo "      --client-temp <path>          Temporary root directory for Client files. (Default: {client_root}/temp)"
     echo "      --consumer-exec <path>        Executable path for Local Consumer. (Default: {client_root}/bin/vehicle)"
     echo "      --producer-exec <path>        Executable path for Producer. (Default: {client_root}/bin/producer)"
-    echo "      --terminate-timeout <timeout> Timeout second to wait before force killing (Default: 60)."
+    echo "      --terminate-timeout <seconds> Timeout second to wait before force killing (Default: 60)."
     echo "  -d, --duration <seconds>          Duration for the test run. (Default: 100)"
     echo "      --num-car <num1,num2,...>     Comma-separated list of car counts for the test. (Default: (10))"
     echo "  -v, --verbose                     Enable verbose output. (Config key: VERBOSE=1)"
@@ -330,7 +330,6 @@ clean_up_r_consumer() {
 trap_handler() {
     echo "[TRAP] Ctrl+C 감지! 정리 중..."
 
-    sleep 10
     clean_up_consumer $CONSUMER_ID
     clean_up_r_consumer $R_CONSUMER_ID
     clean_up_connect $CONNECT_ID
@@ -343,7 +342,7 @@ echo "------------------------------------------------"
 echo "🚀 start test script"
 echo "------------------------------------------------"
 
-INF_DURATION_MS=$((1000 * 60 * 60 * 10)) # 10 hours
+INF_DURATION=$((60 * 60 * 10)) # 10 hours
 VERBOSE_TAG=""
 if [ $VERBOSE -eq 1 ]; then
     VERBOSE_TAG="--verbose"
@@ -382,7 +381,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
         --out-dir $R_CLIENT_OUT --temp-dir $R_CLIENT_TEMP $VERBOSE_TAG \
         --exec-path $R_CONSUMER_EXEC -- \
             --broker $KAFKA_BROKER --group_prefix 'r_group_' \
-            --client_cnt -1 --running_time $INF_DURATION_MS \
+            --client_cnt -1 --running_time $INF_DURATION \
             --outdir $R_CLIENT_OUT --out_prefix '${CURRENT_CAR_NUM}C_' $VERBOSE_TAG"
     if [ $R_CLIENT_HOST == "" ]; then
         $R_CONSUMER_COMMAND
@@ -398,7 +397,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
         --out-dir $CLIENT_OUT --temp-dir $CLIENT_TEMP $VERBOSE_TAG \
         --exec-path $CONSUMER_EXEC -- \
             --broker $KAFKA_BROKER --group_prefix "group_" \
-            --client_cnt $CURRENT_CAR_NUM --running_time $INF_DURATION_MS \
+            --client_cnt $CURRENT_CAR_NUM --running_time $INF_DURATION \
             --outdir $CLIENT_OUT --out_prefix "${CURRENT_CAR_NUM}C_" --no_log $VERBOSE_TAG
     echo "--------------------------------------------------"
 

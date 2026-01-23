@@ -180,7 +180,7 @@ shared_ptr<IService> V2xMqttExprProducerApp::make_service(mosquitto *mosq_client
         mosq_client,
         service_name,
         topic,
-        (args.running_time) / interval,
+        (args.running_time * 1000) / interval,
         interval,
         interval * args.interval_noise_stddev_rate,
         interval / 2,
@@ -245,11 +245,11 @@ Arguments parse_arguments(int argc, char** argv) {
     args.client_prefix = "";
     args.topic_prefix = "";
     args.client_cnt = 1;
-    args.running_time = 10000;
+    args.running_time = 10;
     args.interval_noise_stddev_rate = 0.0;
     args.warmup_cnt = 0;
     args.warmup_topic = "test_warmup";
-    args.start_barrier_delay = 5000;
+    args.start_barrier_delay = 2;
     args.monitoring_batch_size = -1;
     args.scrapable = false;
     args.verbose = false;

@@ -191,13 +191,13 @@ void V2xExprConsumerApp::init_clients() {
 }
 
 void V2xExprConsumerApp::wait_for_running_time() {
-    auto end_time = chrono::steady_clock::now() + chrono::milliseconds(args.running_time);
+    auto end_time = chrono::steady_clock::now() + chrono::seconds(args.running_time);
 
     while (chrono::steady_clock::now() < end_time) {
         if (g_signal_received.load()) {
             break;
         }
-        this_thread::sleep_for(chrono::milliseconds(100));
+        this_thread::sleep_for(chrono::seconds(1));
     }
     end_flag.store(true, memory_order_release);
 }
@@ -291,8 +291,8 @@ Arguments parse_arguments(int argc, char** argv) {
     args.group_prefix="";
     args.topic_prefix="";
     args.client_cnt = 1;
-    args.running_time = 10000;
-    args.start_barrier_delay = 2000;
+    args.running_time = 10;
+    args.start_barrier_delay = 2;
     args.outdir = "";
     args.out_prefix = "";
     args.scrapable = false;

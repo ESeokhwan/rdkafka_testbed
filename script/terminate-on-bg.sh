@@ -52,7 +52,7 @@ if [ "$HELP" -eq 1 ]; then
     echo "      --config <path>               Path to a configuration file. (e.g., key=\"value\" pairs)"
     echo "      --id <identifier>             Identifier for the run instance."
     echo "      --temp-dir <path>             Directory where temporary files will be stored. (Default: temp)"
-    echo "      --timeout <timeout>           Maximum time in seconds to wait before force killing. (Default: -1)"
+    echo "      --timeout <seconds>           Maximum time in seconds to wait before force killing. (Default: -1)"
     echo "  -v, --verbose                     Enable verbose output. (Config key: VERBOSE=1)"
     echo "  -h, --help                        Display this help message and exit."
     echo ""
@@ -122,7 +122,7 @@ fi
 # --- Timeout Logic ---
 for i in $(seq 1 $TIMEOUT); do
     if ! kill -0 $RUNNING_PID > /dev/null 2>&1; then
-        echo "[Terminate_On_BG] Process $RUNNING_PID stopped gracefully."
+        echo "[Terminate_On_BG] Process $RUNNING_PID stopped gracefully in ${i} seconds."
         exit 0
     fi
     sleep 1

@@ -301,7 +301,7 @@ Arguments parse_arguments(int argc, char** argv) {
     args.share_producer = false;
     args.warmup_cnt = 0;
     args.warmup_topic = "test_warmup";
-    args.start_barrier_delay = 5000;
+    args.start_barrier_delay = 2;
     args.monitoring_batch_size = -1;
     args.service_runner_pool_size = 8;
     args.scrapable = false;
