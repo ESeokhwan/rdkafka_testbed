@@ -414,9 +414,8 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     echo "[6/7] Producer 실행 ($TIMESTAMP)"
-    DURATION_MS=$((DURATION * 1000))
     $PRODUCER_EXEC --broker $MQTT_BROKER --client_cnt $CURRENT_CAR_NUM \
-        --running_time $DURATION_MS $VERBOSE_TAG
+        --running_time $DURATION $VERBOSE_TAG
     echo "--------------------------------------------------"
 
     GAURD_TIME=3
