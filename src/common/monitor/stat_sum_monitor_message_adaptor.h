@@ -55,7 +55,7 @@ public:
 
 class ExtractOnlyStatSumMonitorMessageAdaptor: public StatSumMonitorMessageAdaptor {
 private:
-    moniq::adaptor::ExtractOnlyJsonBasedLatencyMonitoringMessageAdaptor root_adaptor;
+    moniq::adaptor::FastExtractOnlyJsonBasedLatencyMonitoringMessageAdaptor root_adaptor;
 
 protected:
     virtual std::string generate_with_root_adaptor(std::string message_id) override;
@@ -73,7 +73,7 @@ public:
 
 class StatSumMonitorMessageGenerator: public StatSumMonitorMessageAdaptor {
 private:
-    moniq::adaptor::JsonBasedLatencyMonitoringMessageGenerator root_adaptor;
+    moniq::adaptor::FastJsonBasedLatencyMonitoringMessageGenerator root_adaptor;
 
 protected:
     virtual std::string generate_with_root_adaptor(std::string message_id) override;
