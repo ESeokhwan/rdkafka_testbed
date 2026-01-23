@@ -356,16 +356,17 @@ clean_up_connect() {
     local timeout=$2
     local is_async=$3
 
-    local bg_tag=""
-    if [ -n "$is_async" ]; then
-        bg_tag="&"
-    fi
+    local cmd="$CONNECT_ROOT/script/terminate-on-bg.sh"
+    local args="--id $id --temp-dir $CONNECT_TEMP --timeout $timeout $VERBOSE_TAG"
 
-    CONNECT_COMMAND="$CONNECT_ROOT/script/terminate-on-bg.sh --id $id --temp-dir $CONNECT_TEMP --timeout $timeout $VERBOSE_TAG $bg_tag"
-    if [ $CONNECT_HOST == "" ]; then
-        $CONNECT_COMMAND
+    if [ -n "$CONNECT_HOST" ] && [ -n "$is_async" ]; then
+        ssh "$CONNECT_HOST" "$cmd" $args &
+    elif [ -n "$CONNECT_HOST" ]; then
+        ssh "$CONNECT_HOST" "$cmd" $args
+    elif [ -n "$is_async" ]; then
+        "$cmd" $args &
     else
-        ssh $CONNECT_HOST $CONNECT_COMMAND
+        "$cmd" $args
     fi
 }
 
@@ -374,12 +375,14 @@ clean_up_client() {
     local timeout=$2
     local is_async=$3
 
-    local bg_tag=""
-    if [ -n "$is_async" ]; then
-        bg_tag="&"
-    fi
+    local cmd="$CLIENT_ROOT/script/terminate-on-bg.sh"
+    local args="--id $id --temp-dir $CLIENT_TEMP --timeout $timeout $VERBOSE_TAG"
 
-    $CLIENT_ROOT/script/terminate-on-bg.sh --id $id --temp-dir $CLIENT_TEMP --timeout $timeout $VERBOSE_TAG $bg_tag
+    if [ -n "$is_async" ]; then
+        "$cmd" $args &
+    else
+        "$cmd" $args
+    fi
 }
 
 clean_up_r_client() {
@@ -387,15 +390,17 @@ clean_up_r_client() {
     local timeout=$2
     local is_async=$3
 
-    local bg_tag=""
-    if [ -n "$is_async" ]; then
-        bg_tag="&"
-    fi
-    R_CLIENT_COMMAND="$R_CLIENT_ROOT/script/terminate-on-bg.sh --id $id --temp-dir $R_CLIENT_TEMP --timeout $timeout VERBOSE_TAG $bg_tag"
-    if [ $R_CLIENT_HOST == "" ]; then
-        $R_CLIENT_COMMAND
+    local cmd="$R_CLIENT_ROOT/script/terminate-on-bg.sh"
+    local args="--id $id --temp-dir $R_CLIENT_TEMP --timeout $timeout $VERBOSE_TAG"
+
+    if [ -n "$R_CLIENT_HOST" ] && [ -n "$is_async" ]; then
+        ssh "$R_CLIENT_HOST" "$cmd" $args &
+    elif [ -n "$R_CLIENT_HOST" ]; then
+        ssh "$R_CLIENT_HOST" "$cmd" $args
+    elif [ -n "$is_async" ]; then
+        "$cmd" $args &
     else
-        ssh $R_CLIENT_HOST $R_CLIENT_COMMAND
+        "$cmd" $args
     fi
 }
 
@@ -465,16 +470,17 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 echo "[4/7] 스케일 단계 시작 ($TIMESTAMP)"
 PREV_CAR_CNT=0
 for (( step=0; step<$NUM_STEPS; step++ )); do
-    echo "      차량 수 ${STEP_CARS[$step]}대로 증가"
     CUR_CAR_NUM=${STEP_CARS[$step]}
     C_START_IDX=$((PREV_CAR_CNT))
     if [ $step -eq 0 ]; then
         C_START_IDX=4
+    else
+        sleep $STEP_INTERVAL
     fi
+    echo "   차량 수 ${CUR_CAR_NUM}대로 증가"
     start_load_consumers $C_START_IDX $CUR_CAR_NUM
     start_producers $PREV_CAR_CNT $CUR_CAR_NUM
     PREV_CAR_CNT=$CUR_CAR_NUM
-    sleep $STEP_INTERVAL
     echo "--------------------------------------------------"
 done
 
