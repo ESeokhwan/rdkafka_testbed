@@ -477,12 +477,12 @@ for (( step=0; step<$NUM_STEPS; step++ )); do
     else
         sleep $STEP_INTERVAL
     fi
-    echo "   차량 수 ${CUR_CAR_NUM}대로 증가"
+    echo "  - 차량 수 ${CUR_CAR_NUM}대로 증가"
     start_load_consumers $C_START_IDX $CUR_CAR_NUM
     start_producers $PREV_CAR_CNT $CUR_CAR_NUM
     PREV_CAR_CNT=$CUR_CAR_NUM
-    echo "--------------------------------------------------"
 done
+echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 echo "[5/7] 최종 대기 시간 시작 ($TIMESTAMP): ${FINAL_HOLD}s"
@@ -492,10 +492,14 @@ echo "--------------------------------------------------"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 echo "[6/7] 순차적 종료 시작 ($TIMESTAMP)"
 for (( step=0; step<$NUM_STEPS; step++ )); do
+    CUR_CAR_NUM=${STEP_CARS[$step]}
+    CUR_REMAIN_CAR_NUM=$((MAX_CAR_CNT - CUR_CAR_NUM))
+    echo "  - 차량 수 ${CUR_REMAIN_CAR_NUM}대로 감소"
     clean_up_client "${PRODUCER_IDS[$step]}" $TERMINATE_TIMEOUT "async"
     clean_up_client "${LOAD_CONSUMER_IDS[$step]}" $TERMINATE_TIMEOUT "async"
     sleep $STEP_INTERVAL
 done
+echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 echo "[7/7] Connect 및 측정용 Consumer 종료 ($TIMESTAMP)"
