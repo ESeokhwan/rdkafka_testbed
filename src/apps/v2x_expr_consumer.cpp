@@ -1,5 +1,4 @@
 #include "abstract_application.h"
-#include "libmoniq/writer/write_strategy/monitor_log_write_strategy.h"
 #include "util/cli_arg_util.h"
 #include "util/time_util.h"
 #include "consumer/consumer_util.h"
@@ -17,6 +16,8 @@
 #include <librdkafka/rdkafkacpp.h>
 #include <libmoniq/monitor_queue.h>
 #include <libmoniq/writer/monitor_log_writer.h>
+#include <libmoniq/writer/write_strategy/monitor_log_write_strategy.h>
+#include <libmoniq/adaptor/latency_monitoring_message_adaptor.h>
 
 using namespace std;
 using namespace common;
@@ -49,6 +50,7 @@ struct ConsumerThreadArg {
 
     shared_ptr<moniq::MonitorQueue> monitor_queue;
     shared_ptr<moniq::writer::MonitorLogWriter> writer;
+    shared_ptr<moniq::adaptor::ILatencyMonitoringMessageAdaptor> message_adaptor;
 
     latch *start_signal;
     atomic<bool> *end_flag;
@@ -76,6 +78,8 @@ private:
 
     atomic<bool> end_flag;
 
+    shared_ptr<moniq::adaptor::ILatencyMonitoringMessageAdaptor> message_adaptor;
+
     void init_clients();
     void wait_for_running_time();
     void join_clients();
@@ -84,9 +88,10 @@ public:
     V2xExprConsumerApp(
         shared_ptr<moniq::MonitorQueue> &monitor_queue,
         shared_ptr<moniq::writer::MonitorLogWriter> &writer,
+        shared_ptr<moniq::adaptor::ILatencyMonitoringMessageAdaptor> &message_adaptor,
         Arguments args,
         vector<struct ServiceArg> &service_args
-    ): AbstractApplication(monitor_queue, writer), args(args), service_args(service_args) {
+    ): AbstractApplication(monitor_queue, writer), args(args), service_args(service_args), message_adaptor(message_adaptor) {
 
     }
 
@@ -141,8 +146,9 @@ int main(int argc, char *argv[]) {
     shared_ptr<moniq::writer::IMonitorLogWriteStrategy> write_strategy =
         make_shared<monitor::StatSumPerSecMonitorLogWriteStrategy>(generate_services(service_args, args.outdir, args.out_prefix));
     shared_ptr<moniq::writer::MonitorLogWriter> writer = make_shared<moniq::writer::MonitorLogWriter>(monitor_queue, write_strategy, -1, -1);
+    shared_ptr<moniq::adaptor::ILatencyMonitoringMessageAdaptor> message_adaptor = make_shared<moniq::adaptor::FastExtractOnlyJsonBasedLatencyMonitoringMessageAdaptor>();
 
-    app = new V2xExprConsumerApp(monitor_queue, writer, args, service_args);
+    app = new V2xExprConsumerApp(monitor_queue, writer, message_adaptor, args, service_args);
     signal(SIGINT, interrupt_handler);
     signal(SIGTERM, interrupt_handler);
     app->run();
@@ -261,11 +267,12 @@ void consume_run(struct ConsumerThreadArg *arg) {
         optional<string> plain_msg_opt = consumer::consume_message(consumer.get(), 1);
         if (!plain_msg_opt.has_value()) continue;
         if (arg->log_disabled) continue;
-        arg->monitor_queue->enqueue(
-            make_unique<monitor::StatSumMonitorLog>(
-                plain_msg_opt.value(), "Responded", util::get_current_timestamp()
-            )
-        );
+        arg->monitor_queue->enqueue(make_unique<monitor::StatSumMonitorLog>(
+            arg->message_adaptor.get(),
+            plain_msg_opt.value(),
+            "Responded",
+            util::get_current_timestamp()
+        ));
         arg->writer->notify_if_needed();
     }
     consumer->close();

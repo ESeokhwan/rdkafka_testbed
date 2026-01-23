@@ -1,13 +1,15 @@
 #include "monitor/stat_sum_monitor_log.h"
 #include "monitor/stat_sum_monitor_message_adaptor.h"
 
+#include <libmoniq/adaptor/latency_monitoring_message_adaptor.h>
 
 namespace common {
 namespace monitor {
 
 StatSumMonitorLog::StatSumMonitorLog(
+    moniq::adaptor::ILatencyMonitoringMessageAdaptor *message_adaptor,
     const std::string& raw_data, const std::string& status, double responded_at
-): moniq::JsonBasedLatencyMonitorLog(raw_data, status, responded_at) {}
+): moniq::JsonBasedLatencyMonitorLog(message_adaptor, raw_data, status, responded_at) {}
 
 std::vector<std::string> StatSumMonitorLog::get_headers() const {
         return { "Service", "Content", "Status", "RequestedAt", "RespondedAt", "Latency" };
