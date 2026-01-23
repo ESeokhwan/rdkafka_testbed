@@ -42,6 +42,8 @@ DURATION=100
 # NUM_CAR=(10 10 20 40 60 80 100 120 130 140 150)
 NUM_CAR=(10)
 
+INTERVAL_NOISE_RATE=0.0
+
 VERBOSE=0
 HELP=0
 CONFIG_FILE=""
@@ -52,7 +54,7 @@ TEMP=$(getopt -o d:vh --longoptions \
     connect-host:, connect-root:, connect-out:, connect-temp:, connect-exec:, \
     r-client-host:, r-client-root:, r-client-out:, r-client-temp:, r-consumer-exec:, \
     client-root:, client-out:, client-temp:, consumer-exec:, producer-exec:, duration:, \
-    num-car:, terminate-timeout:" \
+    num-car:, interval-noise-rate:, terminate-timeout:" \
     -n 'myscript' -- "$@" \
 )
 
@@ -81,6 +83,7 @@ CL_PRODUCER_EXEC=""
 CL_TERMINATE_TIMEOUT=""
 CL_DURATION=""
 CL_NUM_CAR=()
+CL_INTERVAL_NOISE_RATE=""
 CL_VERBOSE=""
 
 # Process arguments and store them in temporary variables
@@ -108,6 +111,7 @@ while true ; do
         --terminate-timeout) CL_TERMINATE_TIMEOUT="$2" ; shift 2 ;;
         -d|--duration) CL_DURATION="$2" ; shift 2 ;;
         --num-car) IFS=',' read -r -a CL_NUM_CAR <<< "$2" ; shift 2 ;;
+        --interval-noise-rate) CL_INTERVAL_NOISE_RATE="$2" ; shift 2 ;;
         -v|--verbose) CL_VERBOSE=1 ; shift ;;
         -h|--help) HELP=1 ; shift ;;
         --) shift ; break ;;
@@ -144,6 +148,7 @@ if [ "$HELP" -eq 1 ]; then
     echo "      --terminate-timeout <seconds> Timeout second to wait before force killing (Default: 60)."
     echo "  -d, --duration <seconds>          Duration for the test run. (Default: 100)"
     echo "      --num-car <num1,num2,...>     Comma-separated list of car counts for the test. (Default: (10))"
+    echo "      --interval-noise-rate <f>     Standard deviation of noise to add to produce interval (Default: 0.0)"
     echo "  -v, --verbose                     Enable verbose output. (Config key: VERBOSE=1)"
     echo "  -h, --help                        Display this help message and exit."
     echo ""
@@ -231,6 +236,9 @@ fi
 if [ ${#CL_NUM_CAR[@]} -gt 0 ]; then
     NUM_CAR=("${CL_NUM_CAR[@]}")
 fi
+if [ -n "$CL_INTERVAL_NOISE_RATE" ]; then
+    INTERVAL_NOISE_RATE="$CL_INTERVAL_NOISE_RATE"
+fi
 if [ -n "$CL_VERBOSE" ]; then
     VERBOSE="$CL_VERBOSE"
 fi
@@ -291,6 +299,7 @@ if [ "$VERBOSE" -eq 1 ]; then
     echo "Terminate Timeout:      $TERMINATE_TIMEOUT"
     echo "Duration:               $DURATION"
     echo "Num Car:                $NUM_CAR"
+    echo "Interval Noise Rate:    $INTERVAL_NOISE_RATE"
     echo "Verbose Mode:           $VERBOSE"
     echo "--------------------------"
 
@@ -415,7 +424,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     echo "[6/7] Producer 실행 ($TIMESTAMP)"
     $PRODUCER_EXEC --broker $MQTT_BROKER --client_cnt $CURRENT_CAR_NUM \
-        --running_time $DURATION $VERBOSE_TAG
+        --running_time $DURATION --interval_noise_stddev_rate $INTERVAL_NOISE_RATE $VERBOSE_TAG
     echo "--------------------------------------------------"
 
     GAURD_TIME=3
