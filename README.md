@@ -65,9 +65,7 @@ The experimental setup is distributed across two server instances to isolate bro
 
 ![expr_overview](docs/assets/experiments_replicating_overview.png)
 
-### Architecture Overview
-
-#### Instance 1: Broker and Metric Consumers
+### Instance 1: Broker and Metric Consumers
 This instance hosts the core data pipeline and metric-gathering clients:
 
 *   **Kafka Broker**: The central message bus in the edge server for the V2X data.
@@ -75,7 +73,7 @@ This instance hosts the core data pipeline and metric-gathering clients:
 *   **Custom Connector**: A bridge that forwards messages from the Mosquitto broker to the Kafka broker.
 *   **Metric Consumer Clients (x4)**: Four dedicated consumer clients connect to the Kafka broker to measure end-to-end latency and reliability for different service types (`sensor info. sharing`, `info. sharing`, `platooning-lower`, and `platooning-lowest`). A 6ms artificial delay is added to simulate network round-trip time, as these consumers run on the same instance as the brokers.
 
-#### Instance 2: Producer and Stress Clients
+### Instance 2: Producer and Stress Clients
 This instance generates the workload for the system:
 
 *   **Producer Clients (N)**: A variable number of clients that generate and send data to the Mosquitto broker on Instance 1.
@@ -90,13 +88,13 @@ The source code for the clients and the connector can be found in the `src/apps/
 *   **Custom Connector**: `src/apps/v2x_expr_custom_connector.cpp`
 
 
-### Static V2X Experiments (Figures 9-11)
+## Static V2X Experiments (Figures 9-11)
 
 The static V2X experiments measuer key performance metrics with a fixed number of V2X Clients within the coverage area.
 
 This experiment is orchestrated by the `script/mqtt_static_v2x_test.sh` script. This script automates setting up the test environment, launching the clients and connector, and running the experiment. It allows for configuring various settings, such as the number of clients, the test duration for each run and more. You can find more details in the [script documentation](docs/TODO.md)
 
-#### Script Usage
+### Script Usage
 
 A typical command to run the script is shown below.
 
@@ -104,7 +102,7 @@ A typical command to run the script is shown below.
 ./script/mqtt_static_v2x_test.sh --config config/your.config --duration 120 --num-car 10,20,30
 ```
 
-#### Configuration
+### Configuration
 
 This script has three levels of configuration, in order of precedence:
 1.  **Command-line arguments** (e.g., `--duration 120`): Highest precedence.
@@ -113,7 +111,7 @@ This script has three levels of configuration, in order of precedence:
 
 It is recommended to use a configuration file for fixed settings, such as broker addresses and component root paths. You can view all available options in the [script documentation](docs/TODO.md).
 
-#### Execution Flow
+### Execution Flow
 
 The script iterates through a predefined list of client numbers (e.g., 10, 20, 40... clients) and performs the following steps for each number:
 
@@ -129,13 +127,13 @@ The script iterates through a predefined list of client numbers (e.g., 10, 20, 4
 After completing the run for one client number, the script waits for a brief period before starting the next run with an increased number of clients.
 
 
-### Dynamic V2X Experiments (Figures 12-13)
+## Dynamic V2X Experiments (Figures 12-13)
 
 The dynamic V2X experiments measure key performance metrics when the number of V2X clients in the coverage area varies over time. In this experiment, the number of clients increases at specified intervals and then decreases in the same manner.
 
 This experiment is orchestrated by the `script/dynamic_v2x_test.sh` script. This script automates setting up the test environment, launching the clients and connector, and running the experiment. It allows for configuring various settings, such as the number of clients at each step, the duration of each step, and more. You can find more details in the [script documentation](docs/TODO.md).
 
-#### Script Usage
+### Script Usage
 
 A typical command to run the script is shown below:
 
@@ -143,7 +141,7 @@ A typical command to run the script is shown below:
 ./script/mqtt_dynamic_v2x_test.sh --config config/your.config --step-interval 20 --final-hold 20 --step-cars 10,20,30,40,50
 ```
 
-#### Configuration
+### Configuration
 
 This script has three levels of configuration, in order of precedence:
 1.  **Command-line arguments** (e.g., `--step-interval 20`): Highest precedence.
@@ -152,7 +150,7 @@ This script has three levels of configuration, in order of precedence:
 
 It is recommended to use a configuration file for fixed settings, such as broker addresses and component root paths. You can view all available options in the [script documentation](docs/TODO.md).
 
-#### Execution Flow
+### Execution Flow
 
 The script executes a single dynamic scaling test that progressively increases the load to a maximum point and then decreases it. It iterates through a list of target client numbers (e.g., 10, 20... 120 cars) and performs the following steps:
 
