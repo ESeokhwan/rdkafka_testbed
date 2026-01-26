@@ -5,7 +5,7 @@ This project is a C++ testbed for `librdkafka` and `mosquitto`, primarily servin
 ## Prerequisites
 
 *   A C++20 compatible compiler (e.g., GCC 10+, Clang 12+)
-*   CMake (version 3.14 or later)
+*   CMake (version 3.30 or later)
 *   Git
 
 ## Project Structure
@@ -15,17 +15,19 @@ This project is a C++ testbed for `librdkafka` and `mosquitto`, primarily servin
 ├── vcpkg.json                           # vcpkg dependencies
 ├── config/                              # Configuration files
 ├── libmoniq/                            # Submodule for monitoring
-├── scripts/                             # Scripts
-│   ├── mqtt_static_v2x_test.sh            # Script for the experiments of Figure 9~11
-│   └── mqtt_dynamic_v2x_test.sh           # Script for the experiments of Figure 12~13
+├── script/                              # Scripts
+│   ├── mqtt_static_v2x_test.sh            # Script for the experiments corresponding to Figure 9~11
+│   ├── mqtt_dynamic_v2x_test.sh           # Script for the experiments corresponding to Figure 12~13
+│   └── ...                                # Helper scripts for experiment automation
 └── src/
     ├── apps/                            # Main application executables
     │   ├── v2x_expr_consumer.cpp
+    │   ├── v2x_expr_custom_connector.cpp
     │   └── v2x_expr_mqtt_producer.cpp
     └── common/                          # Common code shared across applications
 ```
 
-You can view more details for each application in [here](docs/APPS_MANUAL_RUN.md)
+You can find more details for each application [here](docs/APPS_MANUAL_RUN.md)
 
 ## Building the Project
 
@@ -38,25 +40,24 @@ You can view more details for each application in [here](docs/APPS_MANUAL_RUN.md
 
 2.  **Bootstrap vcpkg:**
 
+    **Linux/macOS:**
     ```bash
     ./vcpkg/bootstrap-vcpkg.sh
+    ```
+    **Windows:**
+    ```cmd
+    .\vcpkg\bootstrap-vcpkg.bat
     ```
 
 3.  **Configure and build with CMake:**
 
-    This project uses a CMake preset. To build, run the following commands:
-    </br>for Linux:
+    To build, run the following commands. Then, the executables of applications will be placed in the `bin/` directory.
     ```bash
-    cmake --preset=linux-release
-    cmake --build --preset=linux-release
+    cmake --preset <preset-name>
+    cmake --build --preset <preset-name>
     ```
-    for Windows:
-    ```bash
-    cmake --preset=windows-release
-    cmake --build --preset=windows-release
-    ```
-
-    The executables will be placed in the `bin/` directory.
+    Once built, the application executables will be placed in the `bin/` directory.
+    > **Note:** This project supports various CMake presets, including `linux-release`, `win-64-release`, `macos-release`, and `macos-arm64-release`. Please refer to [`CMakePresets.json`](CMakePresets.json) for the full list of available presets.
 
 ## Replicating the Experiments
 
@@ -70,15 +71,15 @@ The experimental setup is distributed across two server instances to isolate bro
 This instance hosts the core data pipeline and metric-gathering clients:
 
 *   **Kafka Broker**: The central message bus in the edge server for the V2X data.
-*   **Mosquitto Broker**: To support robust ingestion from many clients over the unreliable links, this broker receives data from each client and forwards it to the Kafka broker.
+*   **Mosquitto Broker**: To support robust ingestion from many clients over unreliable links, this broker acts as an ingestion point, receiving data from each client and buffering it for the connector.
 *   **Custom Connector**: A bridge that forwards messages from the Mosquitto broker to the Kafka broker.
-*   **Metric Consumer Clients (x4)**: Four dedicated consumer clients connect to the Kafka broker to measure end-to-end latency and reliability for different service types (`sensor info. sharing`, `info. sharing`, `platooning-lower`, and `platooning-lowest`). A 6ms delay is added to simulate network round-trip time, as these consumers run on the same instance as the brokers.
+*   **Metric Consumer Clients (x4)**: Four dedicated consumer clients connect to the Kafka broker to measure end-to-end latency and reliability for different service types (`sensor info. sharing`, `info. sharing`, `platooning-lower`, and `platooning-lowest`). A 6ms artificial delay is added to simulate network round-trip time, as these consumers run on the same instance as the brokers.
 
 #### Instance 2: Producer and Stress Clients
 This instance generates the workload for the system:
 
 *   **Producer Clients (N)**: A variable number of clients that generate and send data to the Mosquitto broker on Instance 1.
-*   **Stress Consumer Clients (N-4)**: These clients connect to the Kafka broker to generate additional consumer load on the edge server, helping to simulate a busy network.
+*   **Stress Consumer Clients (N-4)**: These clients connect to the Kafka broker to generate additional consumer load on the edge server, helping to simulate high system load on the edge server.
 
 ### Component Implementation
 
@@ -89,9 +90,11 @@ The source code for the clients and the connector can be found in the `src/apps/
 *   **Custom Connector**: `src/apps/v2x_expr_custom_connector.cpp`
 
 
-### Static V2X Experiments (Figure 9~11)
+### Static V2X Experiments (Figures 9-11)
 
-The static V2X experiments are orchestrated by the `script/mqtt_static_v2x_test.sh` script. This script automates setting up the test environment, launching the clients and connector, and running the experiment. It allows for configuring various settings, such as the number of clients and the test duration.
+The static V2X experiments measuer key performance metrics with a fixed number of V2X Clients within the coverage area.
+
+This experiment is orchestrated by the `script/mqtt_static_v2x_test.sh` script. This script automates setting up the test environment, launching the clients and connector, and running the experiment. It allows for configuring various settings, such as the number of clients, the test duration for each run and more. You can find more details in the [script documentation](docs/TODO.md)
 
 #### Script Usage
 
@@ -105,10 +108,10 @@ A typical command to run the script is shown below.
 
 This script has three levels of configuration, in order of precedence:
 1.  **Command-line arguments** (e.g., `--duration 120`): Highest precedence.
-2.  **Configuration file** (e.g., `config/example.config`): Values defined here override the defaults.
+2.  **Configuration file** (e.g., `config/your.config`): Values defined here override the defaults.
 3.  **Default values** in the script: Lowest precedence.
 
-It is recommended to use a configuration file for fixed settings, such as broker addresses and component root paths. You can view all available options in [here](docs/TODO.md).
+It is recommended to use a configuration file for fixed settings, such as broker addresses and component root paths. You can view all available options in the [script documentation](docs/TODO.md).
 
 #### Execution Flow
 
@@ -117,7 +120,7 @@ The script iterates through a predefined list of client numbers (e.g., 10, 20, 4
 1.  **Start Connector**: Launches the custom connector application, which bridges the Mosquitto and Kafka brokers.
 2.  **Clear Consumer Groups**: Deletes any existing Kafka consumer groups from previous runs to ensure a clean start.
 3.  **Start Metric Consumers**: Runs the 4 dedicated metric consumer clients that connect to the Kafka broker. These clients are responsible for measuring latency and reliability.
-4.  **Start Stress Consumers**: Runs a number of stress consumer clients making the current number of consumers same with the producers. These connect to the Kafka broker to generate background load.
+4.  **Start Stress Consumers**: Runs a number of stress consumer clients to ensure the total consumer count matches the number of producers. These connect to the Kafka broker to generate background load.
 5.  **Verify Consumers**: Waits a moment and checks to ensure all consumer clients have successfully connected to their respective groups.
 6.  **Run Producers**: Starts the producer clients, which generate the V2X message load for the duration of the test.
 7.  **Clean Up**: Once the producers have finished, the script terminates the connector and all consumer clients.
@@ -126,13 +129,45 @@ The script iterates through a predefined list of client numbers (e.g., 10, 20, 4
 After completing the run for one client number, the script waits for a brief period before starting the next run with an increased number of clients.
 
 
-### dynamic v2x experiments (Figure 12~13)
-TODO
+### Dynamic V2X Experiments (Figures 12-13)
+
+The dynamic V2X experiments measure key performance metrics when the number of V2X clients in the coverage area varies over time. In this experiment, the number of clients increases at specified intervals and then decreases in the same manner.
+
+This experiment is orchestrated by the `script/dynamic_v2x_test.sh` script. This script automates setting up the test environment, launching the clients and connector, and running the experiment. It allows for configuring various settings, such as the number of clients at each step, the duration of each step, and more. You can find more details in the [script documentation](docs/TODO.md).
+
+#### Script Usage
+
+A typical command to run the script is shown below:
+
+```bash
+./script/mqtt_dynamic_v2x_test.sh --config config/your.config --step-interval 20 --final-hold 20 --step-cars 10,20,30,40,50
+```
+
+#### Configuration
+
+This script has three levels of configuration, in order of precedence:
+1.  **Command-line arguments** (e.g., `--step-interval 20`): Highest precedence.
+2.  **Configuration file** (e.g., `config/your.config`): Values defined here override the defaults.
+3.  **Default values** in the script: Lowest precedence.
+
+It is recommended to use a configuration file for fixed settings, such as broker addresses and component root paths. You can view all available options in the [script documentation](docs/TODO.md).
+
+#### Execution Flow
+
+The script executes a single dynamic scaling test that progressively increases the load to a maximum point and then decreases it. It iterates through a list of target client numbers (e.g., 10, 20... 120 cars) and performs the following steps:
+
+1.  **Start Connector**: Launches the custom connector application to bridge the brokers.
+2.  **Clear Consumer Groups**: Deletes any existing Kafka consumer groups to prepare for the maximum number of clients defined in the test steps.
+3.  **Start Metric Consumers**: Runs the 4 dedicated metric consumer clients. These run continuously throughout the entire test to measure latency and reliability across all phases.
+4.  **Incremental Scale Up**: Iterates through the step list. For each step, it launches a new batch of stress consumers and producers (in the background) to increase the total traffic to the next target level. It waits for the specified `step-interval` between each increment.
+5.  **Stable Hold**: Upon reaching the maximum number of clients, the script continues running all clients for a defined `final-hold` period to measure stability at peak load.
+6.  **Incremental Scale Down**: Iterates through the active client batches in reverse order. It sequentially terminates the producers and stress consumers for each batch, waiting for the `step-interval` between stops, effectively ramping the load down.
+7.  **Final Clean Up**: Once all load-generating clients have been stopped, the script terminates the connector and the metric consumers.
 
 
-## References
+## Citations
 
-If you use Docling in your projects, please consider citing the following:
+If you use this testbed in your projects, please consider citing the following:
 
 ```bib
 // TODO
