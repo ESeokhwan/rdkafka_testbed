@@ -92,7 +92,7 @@ The source code for the clients and the connector can be found in the `src/apps/
 
 The static V2X experiments measure key performance metrics with a fixed number of V2X clients within the coverage area.
 
-This experiment is orchestrated by the `script/mqtt_static_v2x_test.sh` script. This script automates setting up the test environment, launching the clients and connector, and running the experiment. It allows for configuring various settings, such as the number of clients, the test duration for each run and more. You can find more details in the [script documentation](docs/TODO.md)
+This experiment is orchestrated by the `script/mqtt_static_v2x_test.sh` script. This script automates setting up the test environment, launching the clients and connector, and running the experiment. It allows for configuring various settings, such as the number of clients, the test duration for each run and more. You can find more details in the [script documentation](docs/SCRIPT_DOCUMENTATION.md)
 
 ### Script Usage
 
@@ -102,14 +102,7 @@ A typical command to run the script is shown below.
 ./script/mqtt_static_v2x_test.sh --config config/your.config --duration 120 --num-car 10,20,30
 ```
 
-### Configuration
-
-This script has three levels of configuration, in order of precedence:
-1.  **Command-line arguments** (e.g., `--duration 120`): Highest precedence.
-2.  **Configuration file** (e.g., `config/your.config`): Values defined here override the defaults.
-3.  **Default values** in the script: Lowest precedence.
-
-It is recommended to use a configuration file for fixed settings, such as broker addresses and component root paths. You can view all available options in the [script documentation](docs/TODO.md).
+> It is recommended to use a configuration file for fixed settings, such as broker addresses and component root paths. You can view all available options in the [script documentation](docs/SCRIPT_DOCUMENTATION.md).
 
 ### Execution Flow
 
@@ -131,7 +124,7 @@ After completing the run for one client number, the script waits for a brief per
 
 The dynamic V2X experiments measure key performance metrics when the number of V2X clients in the coverage area varies over time. In this experiment, the number of clients increases at specified intervals and then decreases in the same manner.
 
-This experiment is orchestrated by the `script/dynamic_v2x_test.sh` script. This script automates setting up the test environment, launching the clients and connector, and running the experiment. It allows for configuring various settings, such as the number of clients at each step, the duration of each step, and more. You can find more details in the [script documentation](docs/TODO.md).
+This experiment is orchestrated by the `script/dynamic_v2x_test.sh` script. This script automates setting up the test environment, launching the clients and connector, and running the experiment. It allows for configuring various settings, such as the number of clients at each step, the duration of each step, and more. You can find more details in the [script documentation](docs/SCRIPT_DOCUMENTATION.md).
 
 ### Script Usage
 
@@ -141,14 +134,7 @@ A typical command to run the script is shown below:
 ./script/mqtt_dynamic_v2x_test.sh --config config/your.config --step-interval 20 --final-hold 20 --step-cars 10,20,30,40,50
 ```
 
-### Configuration
-
-This script has three levels of configuration, in order of precedence:
-1.  **Command-line arguments** (e.g., `--step-interval 20`): Highest precedence.
-2.  **Configuration file** (e.g., `config/your.config`): Values defined here override the defaults.
-3.  **Default values** in the script: Lowest precedence.
-
-It is recommended to use a configuration file for fixed settings, such as broker addresses and component root paths. You can view all available options in the [script documentation](docs/TODO.md).
+> It is recommended to use a configuration file for fixed settings, such as broker addresses and component root paths. You can view all available options in the [script documentation](docs/SCRIPT_DOCUMENTATION.md).
 
 ### Execution Flow
 
