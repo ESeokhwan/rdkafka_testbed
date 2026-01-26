@@ -59,7 +59,7 @@ You can find more details for each application [here](docs/APPS_MANUAL_RUN.md)
     Once built, the application executables will be placed in the `bin/` directory.
     > **Note:** This project supports various CMake presets, including `linux-release`, `win-64-release`, `macos-release`, and `macos-arm64-release`. Please refer to [`CMakePresets.json`](CMakePresets.json) for the full list of available presets.
 
-## Replicating the Experiments
+## The Experimental Setup
 
 The experimental setup is distributed across two server instances to isolate broker and client workloads, as illustrated below.
 
@@ -90,7 +90,7 @@ The source code for the clients and the connector can be found in the `src/apps/
 
 ## Static V2X Experiments (Figures 9-11)
 
-The static V2X experiments measuer key performance metrics with a fixed number of V2X Clients within the coverage area.
+The static V2X experiments measure key performance metrics with a fixed number of V2X clients within the coverage area.
 
 This experiment is orchestrated by the `script/mqtt_static_v2x_test.sh` script. This script automates setting up the test environment, launching the clients and connector, and running the experiment. It allows for configuring various settings, such as the number of clients, the test duration for each run and more. You can find more details in the [script documentation](docs/TODO.md)
 
