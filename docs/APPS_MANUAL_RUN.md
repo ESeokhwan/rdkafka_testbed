@@ -9,7 +9,9 @@ For example:
 
 The following sections provide detailed descriptions of the options available for key applications in this project.
 
-## `v2x_expr_consumer` Options
+## `v2x_expr_consumer`
+
+This application acts as a Kafka consumer for a V2X (Vehicle-to-Everything) experiment. It creates a specified number of consumer clients, each subscribing to a set of predefined V2X topics (e.g., `S10Hz-Info`, `S30Hz`). Its main purpose is to receive messages from these topics and pass them to a monitoring queue to measure statistics like latency. It can be configured to run for a specific duration, and its output logs can be saved to a directory.
 
 To run the V2X experiment consumer, you can use the following command:
 
@@ -33,7 +35,9 @@ To run the V2X experiment consumer, you can use the following command:
 | `--out_prefix`          | Prefix for output log file names.                      | ""           |
 | `--verbose`, `-v`       | Enable verbose logging.                                | off          |
 
-## `v2x_expr_mqtt_producer` Options
+## `v2x_expr_mqtt_producer`
+
+This application is a multi-threaded MQTT producer designed for a V2X experiment. It simulates multiple vehicles (clients), where each vehicle runs several services that publish messages to different MQTT topics at various frequencies (e.g., 50Hz, 30Hz, 10Hz). The application is used to generate a realistic load on an MQTT broker. It supports configurable message intervals, message sizes, and running duration. It also includes a warmup phase to prepare the system before the actual test run.
 
 To run the MQTT producer, you can use the following command:
 
@@ -57,5 +61,3 @@ To run the MQTT producer, you can use the following command:
 | `--scrapable`                  | Enable scrapable monitoring.                                   | off        |
 | `--outdir`, `-o`               | Directory to save output log files.                            | ""         |
 | `--verbose`, `-v`              | Enable verbose logging.                                        | off        |
-
-For other applications, you can typically find usage instructions by running them with a `--help` flag if implemented.
