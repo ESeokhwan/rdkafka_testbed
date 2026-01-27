@@ -14,12 +14,12 @@ COMMON_SCRIPT_ROOT="."
 REMOTE_USER="user"
 REMOTE_IP="127.0.0.1"
 
-CONNECT_HOST=""
-CONNECT_ROOT="./connect"
-CONNECT_OUT=""
-CONNECT_TEMP=""
+CONNECTOR_HOST=""
+CONNECTOR_ROOT="./connector"
+CONNECTOR_OUT=""
+CONNECTOR_TEMP=""
 
-CONNECT_EXEC=""
+CONNECTOR_EXEC=""
 
 R_CLIENT_HOST=""
 R_CLIENT_ROOT="client"
@@ -50,7 +50,7 @@ CONFIG_FILE=""
 # --- Argument Parsing ---
 TEMP=$(getopt -o d:vh --longoptions \
     "config:, verbose, help, kafka-broker:, mqtt-broker:, common-script-root:, \
-    connect-host:, connect-root:, connect-out:, connect-temp:, connect-exec:, \
+    connector-host:, connector-root:, connector-out:, connector-temp:, connector-exec:, \
     r-client-host:, r-client-root:, r-client-out:, r-client-temp:, r-consumer-exec:, \
     client-root:, client-out:, client-temp:, consumer-exec:, producer-exec:, duration:, \
     num-car:, interval-noise-rate:, terminate-timeout:" \
@@ -64,11 +64,11 @@ eval set -- "$TEMP"
 CL_KAFKA_BROKER=""
 CL_MQTT_BROKER=""
 CL_COMMON_SCRIPT_ROOT=""
-CL_CONNECT_HOST=""
-CL_CONNECT_ROOT=""
-CL_CONNECT_OUT=""
-CL_CONNECT_TEMP=""
-CL_CONNECT_EXEC=""
+CL_CONNECTOR_HOST=""
+CL_CONNECTOR_ROOT=""
+CL_CONNECTOR_OUT=""
+CL_CONNECTOR_TEMP=""
+CL_CONNECTOR_EXEC=""
 CL_R_CLIENT_HOST=""
 CL_R_CLIENT_ROOT=""
 CL_R_CLIENT_OUT=""
@@ -92,11 +92,11 @@ while true ; do
         --kafka-broker) CL_KAFKA_BROKER="$2" ; shift 2;;
         --mqtt-broker) CL_MQTT_BROKER="$2" ; shift 2 ;;
         --common-script-root) CL_COMMON_SCRIPT_ROOT="$2" ; shift 2 ;;
-        --connect-host) CL_CONNECT_HOST="$2" ; shift 2 ;;
-        --connect-root) CL_CONNECT_ROOT="$2" ; shift 2 ;;
-        --connect-out) CL_CONNECT_OUT="$2" ; shift 2 ;;
-        --connect-temp) CL_CONNECT_TEMP="$2" ; shift 2 ;;
-        --connect-exec) CL_CONNECT_EXEC="$2" ; shift 2 ;;
+        --connector-host) CL_CONNECTOR_HOST="$2" ; shift 2 ;;
+        --connector-root) CL_CONNECTOR_ROOT="$2" ; shift 2 ;;
+        --connector-out) CL_CONNECTOR_OUT="$2" ; shift 2 ;;
+        --connector-temp) CL_CONNECTOR_TEMP="$2" ; shift 2 ;;
+        --connector-exec) CL_CONNECTOR_EXEC="$2" ; shift 2 ;;
         --r-client-host) CL_R_CLIENT_HOST="$2" ; shift 2 ;;
         --r-client-root) CL_R_CLIENT_ROOT="$2" ; shift 2 ;;
         --r-client-out) CL_R_CLIENT_OUT="$2" ; shift 2 ;;
@@ -129,11 +129,11 @@ if [ "$HELP" -eq 1 ]; then
     echo "      --broker <host:port>          Kafka broker address. (Default: 127.0.0.1:9092)"
     echo "      --mqtt-broker <host:port>     MQTT broker address. (Default: 127.0.0.1:1883)"
     echo "      --common-script-root <path>   Root directory where common script are located. (Default: .)"
-    echo "      --connect-host <user@host>    Remote host for Connect execution. (Default: empty string for local)"
-    echo "      --connect-root <path>         Root directory on remote host where Connect is located. (Default: ./connect)"
-    echo "      --connect-out <path>          Output root directory for Connect logs. (Default: {connect_root}/out)"
-    echo "      --connect-temp <path>         Temporary root directory for Connect files. (Default: {connect_root}/temp)"
-    echo "      --connect-exec <path>         Executable path for Connect. (Default: {connect_root}/bin/v2x_expr_mqtt_kafka_connector)"
+    echo "      --connector-host <user@host>  Remote host for Connector execution. (Default: empty string for local)"
+    echo "      --connector-root <path>       Root directory on remote host where Connector is located. (Default: ./connector)"
+    echo "      --connector-out <path>        Output root directory for Connector logs. (Default: {connector_root}/out)"
+    echo "      --connector-temp <path>       Temporary root directory for Connector files. (Default: {connector_root}/temp)"
+    echo "      --connector-exec <path>       Executable path for Connector. (Default: {connector_root}/bin/v2x_expr_mqtt_kafka_connector)"
     echo "      --r-client-host <user@host>   Remote host for Remote Clients execution. (Default: empty string for local)"
     echo "      --r-client-root <path>        Root directory on remote host where Remote Client is located. (Default: client)"
     echo "      --r-client-out <path>         Output root directory for Remote Client logs. (Default: {r_client_root}/out)"
@@ -181,20 +181,20 @@ fi
 if [ -n "$CL_COMMON_SCRIPT_ROOT" ]; then
     COMMON_SCRIPT_ROOT="$CL_COMMON_SCRIPT_ROOT"
 fi
-if [ -n "$CL_CONNECT_HOST" ]; then
-    CONNECT_HOST="$CL_CONNECT_HOST"
+if [ -n "$CL_CONNECTOR_HOST" ]; then
+    CONNECTOR_HOST="$CL_CONNECTOR_HOST"
 fi
-if [ -n "$CL_CONNECT_ROOT" ]; then
-    CONNECT_ROOT="$CL_CONNECT_ROOT"
+if [ -n "$CL_CONNECTOR_ROOT" ]; then
+    CONNECTOR_ROOT="$CL_CONNECTOR_ROOT"
 fi
-if [ -n "$CL_CONNECT_OUT" ]; then
-    CONNECT_OUT="$CL_CONNECT_OUT"
+if [ -n "$CL_CONNECTOR_OUT" ]; then
+    CONNECTOR_OUT="$CL_CONNECTOR_OUT"
 fi
-if [ -n "$CL_CONNECT_TEMP" ]; then
-    CONNECT_TEMP="$CL_CONNECT_TEMP"
+if [ -n "$CL_CONNECTOR_TEMP" ]; then
+    CONNECTOR_TEMP="$CL_CONNECTOR_TEMP"
 fi
-if [ -n "$CL_CONNECT_EXEC" ]; then
-    CONNECT_EXEC="$CL_CONNECT_EXEC"
+if [ -n "$CL_CONNECTOR_EXEC" ]; then
+    CONNECTOR_EXEC="$CL_CONNECTOR_EXEC"
 fi
 if [ -n "$CL_R_CLIENT_HOST" ]; then
     R_CLIENT_HOST="$CL_R_CLIENT_HOST"
@@ -243,14 +243,14 @@ if [ -n "$CL_VERBOSE" ]; then
 fi
 
 # --- post-setup-defaults ---
-if [ -z "$CONNECT_OUT" ]; then
-    CONNECT_OUT=${CONNECT_ROOT}/out
+if [ -z "$CONNECTOR_OUT" ]; then
+    CONNECTOR_OUT=${CONNECTOR_ROOT}/out
 fi
-if [ -z "$CONNECT_TEMP" ]; then
-    CONNECT_TEMP=${CONNECT_ROOT}/temp
+if [ -z "$CONNECTOR_TEMP" ]; then
+    CONNECTOR_TEMP=${CONNECTOR_ROOT}/temp
 fi
-if [ -z "$CONNECT_EXEC" ]; then
-    CONNECT_EXEC=${CONNECT_ROOT}/bin/v2x_expr_mqtt_kafka_connector
+if [ -z "$CONNECTOR_EXEC" ]; then
+    CONNECTOR_EXEC=${CONNECTOR_ROOT}/bin/v2x_expr_mqtt_kafka_connector
 fi
 if [ -z "$R_CLIENT_OUT" ]; then
     R_CLIENT_OUT=${R_CLIENT_ROOT}/out
@@ -280,11 +280,11 @@ if [ "$VERBOSE" -eq 1 ]; then
     echo "Kafka Broker:           $KAFKA_BROKER"
     echo "MQTT Broker:            $MQTT_BROKER"
     echo "Common Script Root:     $COMMON_SCRIPT_ROOT"
-    echo "Connect Host:           $CONNECT_HOST"
-    echo "Connect Root:           $CONNECT_ROOT"
-    echo "Connect Out:            $CONNECT_OUT"
-    echo "Connect Temp:           $CONNECT_TEMP"
-    echo "Connect Exec:           $CONNECT_EXEC"
+    echo "Connector Host:         $CONNECTOR_HOST"
+    echo "Connector Root:         $CONNECTOR_ROOT"
+    echo "Connector Out:          $CONNECTOR_OUT"
+    echo "Connector Temp:         $CONNECTOR_TEMP"
+    echo "Connector Exec:         $CONNECTOR_EXEC"
     echo "Remote Client Host:     $R_CLIENT_HOST"
     echo "Remote Client Root:     $R_CLIENT_ROOT"
     echo "Remote Client Out:      $R_CLIENT_OUT"
@@ -309,13 +309,13 @@ if [ "$VERBOSE" -eq 1 ]; then
 fi
 
 # clean up functions
-clean_up_connect() {
+clean_up_connector() {
     IDENTIFIER=$1
-    CONNECT_COMMAND="$CONNECT_ROOT/script/terminate-on-bg.sh --id $IDENTIFIER --temp-dir $CONNECT_TEMP --timeout $TERMINATE_TIMEOUT VERBOSE_TAG"
-    if [ $CONNECT_HOST == "" ]; then
-        $CONNECT_COMMAND
+    CONNECTOR_COMMAND="$CONNECTOR_ROOT/script/terminate-on-bg.sh --id $IDENTIFIER --temp-dir $CONNECTOR_TEMP --timeout $TERMINATE_TIMEOUT VERBOSE_TAG"
+    if [ $CONNECTOR_HOST == "" ]; then
+        $CONNECTOR_COMMAND
     else
-        ssh $CONNECT_HOST $CONNECT_COMMAND
+        ssh $CONNECTOR_HOST $CONNECTOR_COMMAND
     fi
 }
 
@@ -340,7 +340,7 @@ trap_handler() {
 
     clean_up_consumer $CONSUMER_ID
     clean_up_r_consumer $R_CONSUMER_ID
-    clean_up_connect $CONNECT_ID
+    clean_up_connector $CONNECTOR_ID
     exit 1
 }
 trap trap_handler SIGINT
@@ -364,17 +364,17 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
 
     echo "--------------------------------------------------"
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-    echo "[1/7] Executing Connect ($TIMESTAMP)"
-    CONNECT_ID="Connect_${CURRENT_CAR_NUM}"
-    CONNECT_COMMAND="$CONNECT_ROOT/script/run-on-bg.sh --id $CONNECT_ID \
-        --out-dir $CONNECT_OUT --temp-dir $CONNECT_TEMP $VERBOSE_TAG\
-        --exec-path $CONNECT_EXEC -- \
+    echo "[1/7] Executing Connector ($TIMESTAMP)"
+    CONNECTOR_ID="Connector_${CURRENT_CAR_NUM}"
+    CONNECTOR_COMMAND="$CONNECTOR_ROOT/script/run-on-bg.sh --id $CONNECTOR_ID \
+        --out-dir $CONNECTOR_OUT --temp-dir $CONNECTOR_TEMP $VERBOSE_TAG\
+        --exec-path $CONNECTOR_EXEC -- \
             --kafka_broker $KAFKA_BROKER --mqtt_broker $MQTT_BROKER \
             --running_time $INF_DURATION"
-    if [ $CONNECT_HOST == "" ]; then
-        $CONNECT_COMMAND
+    if [ $CONNECTOR_HOST == "" ]; then
+        $CONNECTOR_COMMAND
     else
-        ssh $CONNECT_HOST $CONNECT_COMMAND
+        ssh $CONNECTOR_HOST $CONNECTOR_COMMAND
     fi
     echo "--------------------------------------------------"
 
@@ -434,10 +434,10 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
     echo "--------------------------------------------------"
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-    echo "[7/7] Terminating Consumer + Connect ($TIMESTAMP)"
+    echo "[7/7] Terminating Consumer + Connector ($TIMESTAMP)"
     clean_up_consumer $CONSUMER_ID
     clean_up_r_consumer $R_CONSUMER_ID
-    clean_up_connect $CONNECT_ID
+    clean_up_connector $CONNECTOR_ID
     echo "--------------------------------------------------"
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)

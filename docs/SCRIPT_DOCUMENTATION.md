@@ -24,11 +24,11 @@ The following options are common to both `static_v2x_expr.sh` and `dynamic_v2x_e
 | `--kafka-broker <host:port>` | `KAFKA_BROKER` | Address of the Kafka broker. | `127.0.0.1:9092` |
 | `--mqtt-broker <host:port>` | `MQTT_BROKER` | Address of the MQTT broker. | `127.0.0.1:1883` |
 | `--common-script-root <path>`| `COMMON_SCRIPT_ROOT` | Root directory where common helper scripts (`delete_consumer_group.sh`, etc.) are located. | `.` |
-| `--connect-host <user@host>` | `CONNECT_HOST` | Remote host (`user@ip`) for executing the Connector application. If empty, runs locally. | `""` |
-| `--connect-root <path>` | `CONNECT_ROOT` | Root directory on the remote/local host where the Connector application is located. | `./connect` |
-| `--connect-out <path>` | `CONNECT_OUT` | Output directory for Connector logs. | `{connect-root}/out` |
-| `--connect-temp <path>` | `CONNECT_TEMP` | Temporary directory for Connector files (e.g., PID files). | `{connect-root}/temp` |
-| `--connect-exec <path>` | `CONNECT_EXEC` | Path to the Connector executable. | `{connect-root}/bin/v2x_expr_mqtt_kafka_connector` |
+| `--connector-host <user@host>` | `CONNECTOR_HOST` | Remote host (`user@ip`) for executing the Connector application. If empty, runs locally. | `""` |
+| `--connector-root <path>` | `CONNECTOR_ROOT` | Root directory on the remote/local host where the Connector application is located. | `./connector` |
+| `--connector-out <path>` | `CONNECTOR_OUT` | Output directory for Connector logs. | `{connector-root}/out` |
+| `--connector-temp <path>` | `CONNECTOR_TEMP` | Temporary directory for Connector files (e.g., PID files). | `{connector-root}/temp` |
+| `--connector-exec <path>` | `CONNECTOR_EXEC` | Path to the Connector executable. | `{connector-root}/bin/v2x_expr_mqtt_kafka_connector` |
 | `--r-client-host <user@host>`| `R_CLIENT_HOST` | Remote host (`user@ip`) for executing the Metric Consumer clients. If empty, runs locally. | `""` |
 | `--r-client-root <path>` | `R_CLIENT_ROOT` | Root directory on the remote/local host where the remote client applications are located. | `client` |
 | `--r-client-out <path>` | `R_CLIENT_OUT` | Output directory for remote client logs. | `{r-client-root}/out` |
