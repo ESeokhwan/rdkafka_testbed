@@ -16,14 +16,14 @@ This project is a C++ testbed for `librdkafka` and `mosquitto`, primarily servin
 ├── config/                              # Configuration files
 ├── libmoniq/                            # Submodule for monitoring
 ├── script/                              # Scripts
-│   ├── mqtt_static_v2x_test.sh            # Script for the experiments corresponding to Figure 9~11
-│   ├── mqtt_dynamic_v2x_test.sh           # Script for the experiments corresponding to Figure 12~13
+│   ├── static_v2x_expr.sh                 # Script for the experiments corresponding to Figure 9~11
+│   ├── dynamic_v2x_expr.sh                # Script for the experiments corresponding to Figure 12~13
 │   └── ...                                # Helper scripts for experiment automation
 └── src/
     ├── apps/                            # Main application executables
     │   ├── v2x_expr_consumer.cpp
-    │   ├── v2x_expr_custom_connector.cpp
-    │   └── v2x_expr_mqtt_producer.cpp
+    │   ├── v2x_expr_mqtt_producer.cpp
+    │   └── v2x_expr_mqtt_kafka_connector.cpp
     └── common/                          # Common code shared across applications
 ```
 
@@ -85,21 +85,21 @@ The source code for the clients and the connector can be found in the `src/apps/
 
 *   **Producer Client**: `src/apps/v2x_expr_mqtt_producer.cpp`
 *   **Metric Consumer Client**: `src/apps/v2x_expr_consumer.cpp`
-*   **Custom Connector**: `src/apps/v2x_expr_custom_connector.cpp`
+*   **Custom Connector**: `src/apps/v2x_expr_mqtt_kafka_connector.cpp`
 
 
 ## Static V2X Experiments (Figures 9-11)
 
 The static V2X experiments measure key performance metrics with a fixed number of V2X clients within the coverage area.
 
-This experiment is orchestrated by the `script/mqtt_static_v2x_test.sh` script. This script automates setting up the test environment, launching the clients and connector, and running the experiment. It allows for configuring various settings, such as the number of clients, the test duration for each run and more. You can find more details in the [script documentation](docs/SCRIPT_DOCUMENTATION.md)
+This experiment is orchestrated by the `script/static_v2x_expr.sh` script. This script automates setting up the test environment, launching the clients and connector, and running the experiment. It allows for configuring various settings, such as the number of clients, the test duration for each run and more. You can find more details in the [script documentation](docs/SCRIPT_DOCUMENTATION.md)
 
 ### Script Usage
 
 A typical command to run the script is shown below.
 
 ```bash
-./script/mqtt_static_v2x_test.sh --config config/your.config --duration 120 --num-car 10,20,30
+./script/static_v2x_expr.sh --config config/your.config --duration 120 --num-car 10,20,30
 ```
 
 > It is recommended to use a configuration file for fixed settings, such as broker addresses and component root paths. You can view all available options in the [script documentation](docs/SCRIPT_DOCUMENTATION.md).
@@ -124,14 +124,14 @@ After completing the run for one client number, the script waits for a brief per
 
 The dynamic V2X experiments measure key performance metrics when the number of V2X clients in the coverage area varies over time. In this experiment, the number of clients increases at specified intervals and then decreases in the same manner.
 
-This experiment is orchestrated by the `script/dynamic_v2x_test.sh` script. This script automates setting up the test environment, launching the clients and connector, and running the experiment. It allows for configuring various settings, such as the number of clients at each step, the duration of each step, and more. You can find more details in the [script documentation](docs/SCRIPT_DOCUMENTATION.md).
+This experiment is orchestrated by the `script/dynamic_v2x_expr.sh` script. This script automates setting up the test environment, launching the clients and connector, and running the experiment. It allows for configuring various settings, such as the number of clients at each step, the duration of each step, and more. You can find more details in the [script documentation](docs/SCRIPT_DOCUMENTATION.md).
 
 ### Script Usage
 
 A typical command to run the script is shown below:
 
 ```bash
-./script/mqtt_dynamic_v2x_test.sh --config config/your.config --step-interval 20 --final-hold 20 --step-cars 10,20,30,40,50
+./script/dynamic_v2x_expr.sh --config config/your.config --step-interval 20 --final-hold 20 --step-cars 10,20,30,40,50
 ```
 
 > It is recommended to use a configuration file for fixed settings, such as broker addresses and component root paths. You can view all available options in the [script documentation](docs/SCRIPT_DOCUMENTATION.md).

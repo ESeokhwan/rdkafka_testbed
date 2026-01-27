@@ -16,7 +16,7 @@ It is recommended to use a configuration file for fixed settings that do not cha
 
 ## Common Configuration Options
 
-The following options are common to both `mqtt_static_v2x_test.sh` and `dynamic_v2x_test.sh`.
+The following options are common to both `static_v2x_expr.sh` and `dynamic_v2x_expr.sh`.
 
 | Option | Config Key | Description | Default |
 |---|---|---|---|
@@ -44,7 +44,7 @@ The following options are common to both `mqtt_static_v2x_test.sh` and `dynamic_
 | `-v`, `--verbose` | `VERBOSE` | Enable verbose output, printing all configuration values and script actions. | `0` (off) |
 | `-h`, `--help` | `HELP` | Display the help message for the script and exit. | N/A |
 
-## `mqtt_static_v2x_test.sh`
+## `mqtt_static_v2x_expr.sh`
 
 This script runs the static V2X experiment. It iterates through a list of fixed client counts (`--num-car`), running a complete test for each count for a specified duration.
 
@@ -55,7 +55,7 @@ This script runs the static V2X experiment. It iterates through a list of fixed 
 | `-d`, `--duration <sec>` | `DURATION` | The duration in seconds for each individual test run. | `100` |
 | `--num-car <n1,n2,...>` | `NUM_CAR` | A comma-separated string of client (car) counts to test. The script will perform a full run for each number in the list. | `(10)` |
 
-## `dynamic_v2x_test.sh`
+## `dynamic_v2x_expr.sh`
 
 This script (named `dynamic_v2x_expr.sh` in the filesystem) runs the dynamic V2X experiment. It simulates a changing number of clients over time by incrementally scaling the number of producers and consumers up to a maximum value and then scaling them back down.
 
