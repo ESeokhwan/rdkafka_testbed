@@ -86,6 +86,7 @@ public:
     virtual ~V2xMqttExprProducerApp() = default;
 
     void run() override;
+    void close_service_runners();
 };
 
 
@@ -215,6 +216,12 @@ shared_ptr<IService> V2xMqttExprProducerApp::make_warmup_service(mosquitto *mosq
     );
 }
 
+void V2xMqttExprProducerApp::close_service_runners() {
+    for (auto &service_runner: services_runners) {
+        service_runner->close();
+    }
+}
+
 void V2xMqttExprProducerApp::join_clients() {
     for (auto &client_thread: client_threads) {
         if (client_thread.joinable()) client_thread.join();
@@ -226,9 +233,7 @@ void V2xMqttExprProducerApp::join_clients() {
 }
 
 void V2xMqttExprProducerApp::cleanup_main() {
-    for (auto &service_runner: services_runners) {
-        service_runner->close();
-    }
+    close_service_runners();
     join_clients();
 }
 
@@ -236,8 +241,8 @@ void V2xMqttExprProducerApp::cleanup_main() {
 namespace {
 
 void interrupt_handler(int signum) {
-    cout << "Interrupt signal (" << signum << ") received." << endl;
-    app->cleanup();
+    if (app == nullptr) return;
+    app->close_service_runners();
 }
 
 Arguments parse_arguments(int argc, char** argv) {
