@@ -104,10 +104,10 @@ RdKafka::Producer *create_kafka_producer(std::string brokers, std::string client
     conf->set("bootstrap.servers", brokers, errstr);
     conf->set("client.id", client_id, errstr);
     conf->set("acks", "0", errstr);
-    conf->set("socket.nagle.disable", "1", errstr); // TODO: check it
-    conf->set("batch.size", "1", errstr);
     conf->set("linger.ms", "0", errstr);
-    conf->set("batch.num.messages", "1", errstr); // TODO: check it
+    conf->set("batch.size", "1", errstr);
+    conf->set("batch.num.messages", "1", errstr);
+    conf->set("socket.nagle.disable", "true", errstr);
     RdKafka::Producer *producer = RdKafka::Producer::create(conf, errstr);
     if (!producer) {
         throw std::runtime_error(errstr);
