@@ -21,6 +21,7 @@ public:
     void preprocess() override;
 
     virtual std::string get_service() const;
+    double get_latency() const override;
 };
 
 }

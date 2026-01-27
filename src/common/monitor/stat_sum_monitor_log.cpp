@@ -32,5 +32,9 @@ std::string StatSumMonitorLog::get_service() const {
     return extracted_service_.value();
 }
 
+double StatSumMonitorLog::get_latency() const {
+    return moniq::JsonBasedLatencyMonitorLog::get_latency() + 3;
+}
+
 }
 }
