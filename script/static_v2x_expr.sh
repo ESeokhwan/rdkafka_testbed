@@ -131,19 +131,19 @@ if [ "$HELP" -eq 1 ]; then
     echo "      --common-script-root <path>   Root directory where common script are located. (Default: .)"
     echo "      --connector-host <user@host>  Remote host for Connector execution. (Default: empty string for local)"
     echo "      --connector-root <path>       Root directory on remote host where Connector is located. (Default: ./connector)"
-    echo "      --connector-out <path>        Output root directory for Connector logs. (Default: {connector_root}/out)"
-    echo "      --connector-temp <path>       Temporary root directory for Connector files. (Default: {connector_root}/temp)"
-    echo "      --connector-exec <path>       Executable path for Connector. (Default: {connector_root}/bin/v2x_expr_mqtt_kafka_connector)"
+    echo "      --connector-out <path>        Output root directory for Connector logs. (Default: {connector-root}/out)"
+    echo "      --connector-temp <path>       Temporary root directory for Connector files. (Default: {connector-root}/temp)"
+    echo "      --connector-exec <path>       Executable path for Connector. (Default: {connector-root}/bin/v2x_expr_mqtt_kafka_connector)"
     echo "      --r-client-host <user@host>   Remote host for Remote Clients execution. (Default: empty string for local)"
     echo "      --r-client-root <path>        Root directory on remote host where Remote Client is located. (Default: client)"
-    echo "      --r-client-out <path>         Output root directory for Remote Client logs. (Default: {r_client_root}/out)"
-    echo "      --r-client-temp <path>        Temporary root directory for Remote Client files. (Default: {r_client_root}/temp)"
-    echo "      --r-consumer-exec <name>      Executable name for Remote Consumer. (Default: {r_client_root}/bin/v2x_expr_consumer)"
+    echo "      --r-client-out <path>         Output root directory for Remote Client logs. (Default: {r-client-root}/out)"
+    echo "      --r-client-temp <path>        Temporary root directory for Remote Client files. (Default: {r-client-root}/temp)"
+    echo "      --r-consumer-exec <name>      Executable name for Remote Consumer. (Default: {r-client-root}/bin/v2x_expr_consumer)"
     echo "      --client-root <path>          Root directory where Client is located. (Default: ./client)"
-    echo "      --client-out <path>           Output root directory for Client logs. (Default: {client_root}/out)"
-    echo "      --client-temp <path>          Temporary root directory for Client files. (Default: {client_root}/temp)"
-    echo "      --consumer-exec <path>        Executable path for Local Consumer. (Default: {client_root}/bin/v2x_expr_consumer)"
-    echo "      --producer-exec <path>        Executable path for Producer. (Default: {client_root}/bin/v2x_expr_mqtt_producer)"
+    echo "      --client-out <path>           Output root directory for Client logs. (Default: {client-root}/out)"
+    echo "      --client-temp <path>          Temporary root directory for Client files. (Default: {client-root}/temp)"
+    echo "      --consumer-exec <path>        Executable path for Local Consumer. (Default: {client-root}/bin/v2x_expr_consumer)"
+    echo "      --producer-exec <path>        Executable path for Producer. (Default: {client-root}/bin/v2x_expr_mqtt_producer)"
     echo "      --terminate-timeout <seconds> Timeout second to wait before force killing (Default: 60)."
     echo "  -d, --duration <seconds>          Duration for the test run. (Default: 100)"
     echo "      --num-car <num1,num2,...>     Comma-separated list of car counts for the test. (Default: (10))"
@@ -369,8 +369,8 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
     CONNECTOR_COMMAND="$CONNECTOR_ROOT/script/run-on-bg.sh --id $CONNECTOR_ID \
         --out-dir $CONNECTOR_OUT --temp-dir $CONNECTOR_TEMP $VERBOSE_TAG\
         --exec-path $CONNECTOR_EXEC -- \
-            --kafka_broker $KAFKA_BROKER --mqtt_broker $MQTT_BROKER \
-            --running_time $INF_DURATION"
+            --kafka-broker $KAFKA_BROKER --mqtt-broker $MQTT_BROKER \
+            --running-time $INF_DURATION"
     if [ $CONNECTOR_HOST == "" ]; then
         $CONNECTOR_COMMAND
     else
@@ -390,9 +390,9 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
     R_CONSUMER_COMMAND="$R_CLIENT_ROOT/script/run-on-bg.sh --id $R_CONSUMER_ID \
         --out-dir $R_CLIENT_OUT --temp-dir $R_CLIENT_TEMP $VERBOSE_TAG \
         --exec-path $R_CONSUMER_EXEC -- \
-            --broker $KAFKA_BROKER --group_prefix 'r_group_' \
-            --client_cnt -1 --running_time $INF_DURATION \
-            --outdir $R_CLIENT_OUT --out_prefix '${CURRENT_CAR_NUM}C_' $VERBOSE_TAG"
+            --broker $KAFKA_BROKER --group-prefix 'r_group_' \
+            --client-cnt -1 --running-time $INF_DURATION \
+            --outdir $R_CLIENT_OUT --out-prefix '${CURRENT_CAR_NUM}C_' $VERBOSE_TAG"
     if [ $R_CLIENT_HOST == "" ]; then
         $R_CONSUMER_COMMAND
     else
@@ -406,9 +406,9 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
     $CLIENT_ROOT/script/run-on-bg.sh --id $CONSUMER_ID \
         --out-dir $CLIENT_OUT --temp-dir $CLIENT_TEMP $VERBOSE_TAG \
         --exec-path $CONSUMER_EXEC -- \
-            --broker $KAFKA_BROKER --group_prefix "group_" \
-            --client_cnt $CURRENT_CAR_NUM --running_time $INF_DURATION \
-            --outdir $CLIENT_OUT --out_prefix "${CURRENT_CAR_NUM}C_" --no_log $VERBOSE_TAG
+            --broker $KAFKA_BROKER --group-prefix "group_" \
+            --client-cnt $CURRENT_CAR_NUM --running-time $INF_DURATION \
+            --outdir $CLIENT_OUT --out-prefix "${CURRENT_CAR_NUM}C_" --no-log $VERBOSE_TAG
     echo "--------------------------------------------------"
 
     GAURD_TIME=3
@@ -424,8 +424,8 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     echo "[6/7] Executing Producer ($TIMESTAMP)"
-    $PRODUCER_EXEC --broker $MQTT_BROKER --client_cnt $CURRENT_CAR_NUM \
-        --running_time $DURATION --interval_noise_stddev_rate $INTERVAL_NOISE_RATE $VERBOSE_TAG
+    $PRODUCER_EXEC --broker $MQTT_BROKER --client-cnt $CURRENT_CAR_NUM \
+        --running-time $DURATION --interval-noise-stddev-rate $INTERVAL_NOISE_RATE $VERBOSE_TAG
     echo "--------------------------------------------------"
 
     GAURD_TIME=3
