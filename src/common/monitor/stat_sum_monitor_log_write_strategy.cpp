@@ -71,13 +71,13 @@ bool StatSumPerSecMonitorLogWriteStrategy::commit() {
 }
 
 std::ostream& print_latency_log(std::ostream &ostream, const ProcessedLog &log) {
-    return ostream << log.content << "," << log.status << "," 
+    return ostream << std::fixed << log.content << "," << log.status << "," 
         << log.requested_at << "," << log.responded_at << "," << log.latency << "\n";
 }
 
 std::ostream& print_stat_log(std::ostream &ostream, const Statistics &log) {
-    return ostream << log.record_cnt << "," << log.reliability << "," << log.avg_latency
-        << "," << log.p90_latency << "," << log.p99_latency << "\n";
+    return ostream << std::fixed << log.record_cnt << "," << log.reliability << "," 
+        << log.avg_latency << "," << log.p90_latency << "," << log.p99_latency << "\n";
 }
 
 // Statistics calculating functions.
