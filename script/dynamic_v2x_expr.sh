@@ -436,7 +436,9 @@ echo "[1/7] Connect 실행 ($TIMESTAMP)"
 CONNECT_ID="Connect_Dynamic"
 CONNECT_COMMAND="$CONNECT_ROOT/script/run-on-bg.sh --id $CONNECT_ID \
     --out-dir $CONNECT_OUT --temp-dir $CONNECT_TEMP $VERBOSE_TAG\
-    --exec-path $CONNECT_EXEC 1"
+    --exec-path $CONNECT_EXEC -- \
+        --kafka_broker $KAFKA_BROKER --mqtt_broker $MQTT_BROKER \
+        --running_time $INF_DURATION"
 if [ $CONNECT_HOST == "" ]; then
     $CONNECT_COMMAND
 else

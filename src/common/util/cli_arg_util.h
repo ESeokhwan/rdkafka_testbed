@@ -39,7 +39,9 @@ enum class LongOnlyOptionVals {
     GROUP_PREFIX,
     CLIENT_PREFIX,
     TOPIC_PREFIX,
-    OUT_PREFIX
+    OUT_PREFIX,
+    KAFKA_BROKER,
+    MQTT_BROKER
 };
 
 }
@@ -95,6 +97,10 @@ constexpr OptionWrapper HELP_OPTION = {"help", no_argument, nullptr, 'h', "Show 
 constexpr OptionWrapper VERBOSE_OPTION = {"verbose", no_argument, nullptr, 'v', "Enable verbose logging"};
 
 constexpr OptionWrapper BROKER_OPTION = {"broker", required_argument, nullptr, 'b', "Broker address"};
+
+constexpr OptionWrapper KAFKA_BROKER_OPTION = {"kafka_broker", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::KAFKA_BROKER), "Kafka broker address"};
+
+constexpr OptionWrapper MQTT_BROKER_OPTION = {"mqtt_broker", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::MQTT_BROKER), "MQTT broker address"};
 
 constexpr OptionWrapper PREFIX_OPTION = {"prefix", required_argument, nullptr, 'p', "Prefix for topic, client, and etc."};
 
