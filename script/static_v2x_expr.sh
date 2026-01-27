@@ -385,7 +385,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
     echo "--------------------------------------------------"
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-    echo "[3/7] Executing Consumer (Remote) for measurement ($TIMESTAMP)"
+    echo "[3/7] Executing Consumer for measurement ($TIMESTAMP)"
     R_CONSUMER_ID="RemoteConsumer_${CURRENT_CAR_NUM}"
     R_CONSUMER_COMMAND="$R_CLIENT_ROOT/script/run-on-bg.sh --id $R_CONSUMER_ID \
         --out-dir $R_CLIENT_OUT --temp-dir $R_CLIENT_TEMP $VERBOSE_TAG \
@@ -401,7 +401,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
     echo "--------------------------------------------------"
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-    echo "[4/7] Executing Consumer (Local) for load ($TIMESTAMP)"
+    echo "[4/7] Executing Consumer for load ($TIMESTAMP)"
     CONSUMER_ID="Consumer_${CURRENT_CAR_NUM}"
     $CLIENT_ROOT/script/run-on-bg.sh --id $CONSUMER_ID \
         --out-dir $CLIENT_OUT --temp-dir $CLIENT_TEMP $VERBOSE_TAG \

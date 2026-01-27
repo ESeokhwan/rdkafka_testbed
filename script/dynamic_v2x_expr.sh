@@ -453,7 +453,7 @@ $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT
 echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-echo "[3/7] Executing Consumer (Remote) for measurement ($TIMESTAMP)"
+echo "[3/7] Executing Consumer for measurement ($TIMESTAMP)"
 R_CONSUMER_ID="RemoteConsumer_Dynamic"
 R_CONSUMER_COMMAND="$R_CLIENT_ROOT/script/run-on-bg.sh --id $R_CONSUMER_ID \
     --out-dir $R_CLIENT_OUT --temp-dir $R_CLIENT_TEMP $VERBOSE_TAG \
@@ -469,7 +469,7 @@ fi
 echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-echo "[4/7] Starting scale steps ($TIMESTAMP)"
+echo "[4/7] Starting scale up steps ($TIMESTAMP)"
 PREV_CAR_CNT=0
 for (( step=0; step<$NUM_STEPS; step++ )); do
     CUR_CAR_NUM=${STEP_CARS[$step]}
