@@ -269,14 +269,17 @@ void consume_run(struct ConsumerThreadArg *arg) {
     if (!consumer::subscribe_topics(consumer.get(), arg->topics)) return;
 
     while (!arg->end_flag->load(memory_order_acquire)) {
-        optional<string> plain_msg_opt = consumer::consume_message(consumer.get(), 1);
-        if (!plain_msg_opt.has_value()) continue;
+        RdKafka::Message *msg = consumer::consume_message(consumer.get(), 1);
+        std::string plain_msg = std::string(static_cast<const char*>(msg->payload()));
+        RdKafka::MessageTimestamp ts = msg->timestamp();
+        delete msg;
+
         if (arg->log_disabled) continue;
         arg->monitor_queue->enqueue(make_unique<monitor::StatSumMonitorLog>(
             arg->message_adaptor.get(),
-            plain_msg_opt.value(),
+            plain_msg,
             "Responded",
-            util::get_current_timestamp()
+            ts.timestamp
         ));
         arg->writer->notify_if_needed();
     }
