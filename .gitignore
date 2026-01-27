@@ -560,5 +560,6 @@ config/*
 !config/example.config
 out/
 temp/
+GEMINI.md
 
 librdkafka/
