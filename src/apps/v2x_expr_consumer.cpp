@@ -270,6 +270,7 @@ void consume_run(struct ConsumerThreadArg *arg) {
 
     while (!arg->end_flag->load(memory_order_acquire)) {
         RdKafka::Message *msg = consumer::consume_message(consumer.get(), 1);
+        if (msg == nullptr) continue;
         std::string plain_msg = std::string(static_cast<const char*>(msg->payload()));
         RdKafka::MessageTimestamp ts = msg->timestamp();
         delete msg;
