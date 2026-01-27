@@ -9,6 +9,7 @@
 namespace {
 
 RdKafka::Producer *create_kafka_producer(std::string brokers, std::string client_id);
+RdKafka::Topic *create_kafka_topic(RdKafka::Producer *producer, std::string topic);
 mosquitto *create_mosq_client(
     std::string broker,
     std::string client_id,
@@ -28,6 +29,7 @@ MqttKafkaConnector::MqttKafkaConnector(
     std::string sink_topic
 ): id(id), source_topic(source_topic), sink_topic(sink_topic) {
     kafka_producer = create_kafka_producer(kafka_broker, id + "_connector");
+    sink_topic_obj = create_kafka_topic(kafka_producer, sink_topic);
     mqtt_client = create_mosq_client(mqtt_broker, id + "_connector", this, on_connect, on_message);
 }
 
@@ -37,6 +39,7 @@ MqttKafkaConnector::~MqttKafkaConnector() {
     mosquitto_destroy(mqtt_client);
 
     flush_producer(kafka_producer);
+    delete sink_topic_obj;
     delete kafka_producer;
 }
 
@@ -55,9 +58,9 @@ void MqttKafkaConnector::on_message(struct mosquitto *mosq, void *obj, const str
 
     self->total_send_cnt += 1;
     int rc = self->kafka_producer->produce(
-        self->sink_topic, RdKafka::Topic::PARTITION_UA, RdKafka::Producer::RK_MSG_COPY,
+        self->sink_topic_obj, RdKafka::Topic::PARTITION_UA, RdKafka::Producer::RK_MSG_COPY,
         const_cast<void *>(static_cast<const void *>(data)),
-        strlen(data), nullptr, 0, 0, nullptr
+        strlen(data), nullptr, nullptr
     );
     self->kafka_producer->poll(0);
 
@@ -112,6 +115,15 @@ RdKafka::Producer *create_kafka_producer(std::string brokers, std::string client
     return producer;
 }
 
+RdKafka::Topic *create_kafka_topic(RdKafka::Producer *producer, std::string topic) {
+    std::string errstr;
+    RdKafka::Topic *topic_obj = RdKafka::Topic::create(producer, topic, nullptr, errstr);
+    if (!topic_obj) {
+        throw std::runtime_error(errstr);
+    }
+    return topic_obj;
+}
+
 mosquitto *create_mosq_client(
     std::string broker,
     std::string client_id,
@@ -119,6 +131,7 @@ mosquitto *create_mosq_client(
     void (*on_connect)(struct mosquitto *, void *, int),
     void (*on_message)(struct mosquitto *, void *, const struct mosquitto_message *)
 ) {
+    mosquitto_lib_init();
     mosquitto *mosq = mosquitto_new(client_id.c_str(), true, obj);
     if (!mosq) {
         throw std::runtime_error("Failed to create Mosquitto instance");

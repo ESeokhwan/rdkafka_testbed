@@ -15,6 +15,7 @@ private:
     std::string id;
     std::string source_topic;
     std::string sink_topic;
+    RdKafka::Topic *sink_topic_obj;
 
     std::atomic<int> total_send_cnt{0};
     std::atomic<int> fail_send_cnt{0};
