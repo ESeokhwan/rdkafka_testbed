@@ -53,8 +53,6 @@ struct Arguments {
 
     bool scrapable;
     bool verbose;
-
-    string outdir;
 };
 
 class BasicProducersTest: public AbstractApplication {
@@ -131,8 +129,7 @@ int main(int argc, char *argv[]) {
             << "Start Barrier Delay: " << args.start_barrier_delay << "\n"
             << "Monitoring Batch Size: " << args.monitoring_batch_size << "\n"
             << "Service Runner Pool Size: " << args.service_runner_pool_size << "\n"
-            << "Scrapable: " << (args.scrapable ? "on" : "off") << "\n"
-            << "Output Directory: " << args.outdir << endl;
+            << "Scrapable: " << (args.scrapable ? "on" : "off") << endl;
     }
 
     shared_ptr<moniq::adaptor::IMessageAdaptor> adaptor =
@@ -366,7 +363,6 @@ Arguments parse_arguments(int argc, char** argv) {
         util::MONITORING_BATCH_SIZE_OPTION,
         util::SERVICE_RUNNER_POOL_SIZE_OPTION,
         util::SCRAPABLE_OPTION,
-        util::OUTDIR_OPTION,
         util::VERBOSE_OPTION,
     };
 
@@ -397,7 +393,6 @@ Arguments parse_arguments(int argc, char** argv) {
             case util::MONITORING_BATCH_SIZE_OPTION.get_val(): args.monitoring_batch_size = atoi(optarg); break;
             case util::SERVICE_RUNNER_POOL_SIZE_OPTION.get_val(): args.service_runner_pool_size = atoi(optarg); break;
             case util::SCRAPABLE_OPTION.get_val(): args.scrapable = true; break;
-            case util::OUTDIR_OPTION.get_val(): args.outdir = optarg; break;
             case util::VERBOSE_OPTION.get_val(): args.verbose = true; break;
             default:
                 cerr << "Error: Unknown option or missing argument." << endl << endl;

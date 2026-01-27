@@ -45,8 +45,6 @@ struct Arguments {
 
     bool scrapable;
     bool verbose;
-
-    string outdir;
 };
 
 struct ServiceInfo {
@@ -123,8 +121,7 @@ int main(int argc, char *argv[]) {
             << "Warmup Topic: " << args.warmup_topic << "\n"
             << "Start Barrier Delay: " << args.start_barrier_delay << "\n"
             << "Monitoring Batch Size: " << args.monitoring_batch_size << "\n"
-            << "Scrapable: " << (args.scrapable ? "on" : "off") << "\n"
-            << "Output Directory: " << args.outdir << endl;
+            << "Scrapable: " << (args.scrapable ? "on" : "off") << endl;
     }
 
     shared_ptr<moniq::MonitorQueue> monitor_queue = make_shared<moniq::MonitorQueue>();
@@ -276,7 +273,6 @@ Arguments parse_arguments(int argc, char** argv) {
         util::START_BARRIER_DELAY_OPTION,
         util::MONITORING_BATCH_SIZE_OPTION,
         util::SCRAPABLE_OPTION,
-        util::OUTDIR_OPTION,
         util::VERBOSE_OPTION,
     };
 
@@ -297,7 +293,6 @@ Arguments parse_arguments(int argc, char** argv) {
             case util::START_BARRIER_DELAY_OPTION.get_val(): args.start_barrier_delay = atoi(optarg); break;
             case util::MONITORING_BATCH_SIZE_OPTION.get_val(): args.monitoring_batch_size = atoi(optarg); break;
             case util::SCRAPABLE_OPTION.get_val(): args.scrapable = true; break;
-            case util::OUTDIR_OPTION.get_val(): args.outdir = optarg; break;
             case util::VERBOSE_OPTION.get_val(): args.verbose = true; break;
             default:
                 cerr << "Error: Unknown option or missing argument." << endl << endl;

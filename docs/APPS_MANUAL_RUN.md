@@ -59,5 +59,4 @@ To run the MQTT producer, you can use the following command:
 | `--start_barrier_delay`        | Delay in seconds before producers start publishing.            | 2          |
 | `--monitoring_batch_size`      | The number of messages to wait before logging monitoring data. | 100        |
 | `--scrapable`                  | Enable scrapable monitoring.                                   | off        |
-| `--outdir`, `-o`               | Directory to save output log files.                            | ""         |
 | `--verbose`, `-v`              | Enable verbose logging.                                        | off        |
