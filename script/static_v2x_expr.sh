@@ -336,7 +336,7 @@ clean_up_r_consumer() {
 
 # trap handler
 trap_handler() {
-    echo "[TRAP] Ctrl+C 감지! 정리 중..."
+    echo "[TRAP] Ctrl+C detected! Cleaning up..."
 
     clean_up_consumer $CONSUMER_ID
     clean_up_r_consumer $R_CONSUMER_ID
@@ -347,7 +347,7 @@ trap trap_handler SIGINT
 
 # script's main logic
 echo "------------------------------------------------"
-echo "🚀 start test script"
+echo "🚀 Starting test script"
 echo "------------------------------------------------"
 
 INF_DURATION=$((60 * 60 * 10)) # 10 hours
@@ -360,11 +360,11 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
     CURRENT_CAR_NUM=$CAR_NUM
 
     echo "=================================================="
-    echo "실험 시작: NUM_CAR=$CURRENT_CAR_NUM"
+    echo "Starting experiment: NUM_CAR=$CURRENT_CAR_NUM"
 
     echo "--------------------------------------------------"
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-    echo "[1/7] Connect 실행 ($TIMESTAMP)"
+    echo "[1/7] Executing Connect ($TIMESTAMP)"
     CONNECT_ID="Connect_${CURRENT_CAR_NUM}"
     CONNECT_COMMAND="$CONNECT_ROOT/script/run-on-bg.sh --id $CONNECT_ID \
         --out-dir $CONNECT_OUT --temp-dir $CONNECT_TEMP $VERBOSE_TAG\
@@ -379,13 +379,13 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
     echo "--------------------------------------------------"
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-    echo "[2/7] Consumer Groups 삭제 ($TIMESTAMP)"
+    echo "[2/7] Deleting Consumer Groups ($TIMESTAMP)"
     $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "group_" --count $CURRENT_CAR_NUM $VERBOSE_TAG
     $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --count 4 $VERBOSE_TAG
     echo "--------------------------------------------------"
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-    echo "[3/7] 측정을 위한 Consumer (Remote) 실행 ($TIMESTAMP)"
+    echo "[3/7] Executing Consumer (Remote) for measurement ($TIMESTAMP)"
     R_CONSUMER_ID="RemoteConsumer_${CURRENT_CAR_NUM}"
     R_CONSUMER_COMMAND="$R_CLIENT_ROOT/script/run-on-bg.sh --id $R_CONSUMER_ID \
         --out-dir $R_CLIENT_OUT --temp-dir $R_CLIENT_TEMP $VERBOSE_TAG \
@@ -401,7 +401,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
     echo "--------------------------------------------------"
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-    echo "[4/7] 부하를 위한 Consumer (Local) 실행 ($TIMESTAMP)"
+    echo "[4/7] Executing Consumer (Local) for load ($TIMESTAMP)"
     CONSUMER_ID="Consumer_${CURRENT_CAR_NUM}"
     $CLIENT_ROOT/script/run-on-bg.sh --id $CONSUMER_ID \
         --out-dir $CLIENT_OUT --temp-dir $CLIENT_TEMP $VERBOSE_TAG \
@@ -412,36 +412,36 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
     echo "--------------------------------------------------"
 
     GAURD_TIME=3
-    echo "${GAURD_TIME}초 대기 후 다음 작업 실행..."
+    echo "Waiting for ${GAURD_TIME} seconds before next operation..."
     sleep $GAURD_TIME
     echo "--------------------------------------------------"
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-    echo "[5/7] Consumer Groups 연결 확인 ($TIMESTAMP)"
+    echo "[5/7] Checking Consumer Groups connection ($TIMESTAMP)"
     $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "group_" --count $CURRENT_CAR_NUM $VERBOSE_TAG
     $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --count 4 $VERBOSE_TAG
     echo "--------------------------------------------------"
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-    echo "[6/7] Producer 실행 ($TIMESTAMP)"
+    echo "[6/7] Executing Producer ($TIMESTAMP)"
     $PRODUCER_EXEC --broker $MQTT_BROKER --client_cnt $CURRENT_CAR_NUM \
         --running_time $DURATION --interval_noise_stddev_rate $INTERVAL_NOISE_RATE $VERBOSE_TAG
     echo "--------------------------------------------------"
 
     GAURD_TIME=3
-    echo "${GAURD_TIME}초 대기 후 다음 작업 실행..."
+    echo "Waiting for ${GAURD_TIME} seconds before next operation..."
     sleep $GAURD_TIME
     echo "--------------------------------------------------"
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-    echo "[7/7] Consumer + Connect 종료 ($TIMESTAMP)"
+    echo "[7/7] Terminating Consumer + Connect ($TIMESTAMP)"
     clean_up_consumer $CONSUMER_ID
     clean_up_r_consumer $R_CONSUMER_ID
     clean_up_connect $CONNECT_ID
     echo "--------------------------------------------------"
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-    echo "[8/8] 결과 출력 ($TIMESTAMP)"
+    echo "[8/8] Printing results ($TIMESTAMP)"
 
     {
         ssh $R_CLIENT_HOST "cat $R_CLIENT_OUT/$R_CONSUMER_ID.log"
@@ -451,5 +451,5 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
 done
 
 echo "--------------------------------------------------"
-echo "✅ 모든 실험 완료!"
+echo "✅ All experiments completed!"
 echo "--------------------------------------------------"

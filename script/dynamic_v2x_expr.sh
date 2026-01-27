@@ -406,7 +406,7 @@ clean_up_r_client() {
 
 # trap handler
 trap_handler() {
-    echo "[TRAP] Ctrl+C 감지! 정리 중..."
+    echo "[TRAP] Ctrl+C detected! Cleaning up..."
 
     for PRODUCER_ID in "${PRODUCER_IDS[@]}"; do
         clean_up_client $PRODUCER_ID $TERMINATE_TIMEOUT
@@ -422,7 +422,7 @@ trap trap_handler SIGINT
 
 # script's main logic
 echo "------------------------------------------------"
-echo "🚀 start test script"
+echo "🚀 Starting test script"
 echo "------------------------------------------------"
 
 LOAD_CONSUMER_IDS=()
@@ -432,7 +432,7 @@ NUM_STEPS=${#STEP_CARS[@]}
 MAX_CAR_CNT=${STEP_CARS[$((NUM_STEPS-1))]}
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-echo "[1/7] Connect 실행 ($TIMESTAMP)"
+echo "[1/7] Executing Connect ($TIMESTAMP)"
 CONNECT_ID="Connect_Dynamic"
 CONNECT_COMMAND="$CONNECT_ROOT/script/run-on-bg.sh --id $CONNECT_ID \
     --out-dir $CONNECT_OUT --temp-dir $CONNECT_TEMP $VERBOSE_TAG\
@@ -447,13 +447,13 @@ fi
 echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-echo "[2/7] Consumer Groups 삭제 ($TIMESTAMP)"
+echo "[2/7] Deleting Consumer Groups ($TIMESTAMP)"
 $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "group_" --count $MAX_CAR_CNT $VERBOSE_TAG
 $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --count 4 $VERBOSE_TAG
 echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-echo "[3/7] 측정을 위한 Consumer (Remote) 실행 ($TIMESTAMP)"
+echo "[3/7] Executing Consumer (Remote) for measurement ($TIMESTAMP)"
 R_CONSUMER_ID="RemoteConsumer_Dynamic"
 R_CONSUMER_COMMAND="$R_CLIENT_ROOT/script/run-on-bg.sh --id $R_CONSUMER_ID \
     --out-dir $R_CLIENT_OUT --temp-dir $R_CLIENT_TEMP $VERBOSE_TAG \
@@ -469,7 +469,7 @@ fi
 echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-echo "[4/7] 스케일 단계 시작 ($TIMESTAMP)"
+echo "[4/7] Starting scale steps ($TIMESTAMP)"
 PREV_CAR_CNT=0
 for (( step=0; step<$NUM_STEPS; step++ )); do
     CUR_CAR_NUM=${STEP_CARS[$step]}
@@ -479,7 +479,7 @@ for (( step=0; step<$NUM_STEPS; step++ )); do
     else
         sleep $STEP_INTERVAL
     fi
-    echo "  - 차량 수 ${CUR_CAR_NUM}대로 증가"
+    echo "  - Increasing car count to ${CUR_CAR_NUM}"
     start_load_consumers $C_START_IDX $CUR_CAR_NUM
     start_producers $PREV_CAR_CNT $CUR_CAR_NUM
     PREV_CAR_CNT=$CUR_CAR_NUM
@@ -487,16 +487,16 @@ done
 echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-echo "[5/7] 최종 대기 시간 시작 ($TIMESTAMP): ${FINAL_HOLD}s"
+echo "[5/7] Starting final hold time ($TIMESTAMP): ${FINAL_HOLD}s"
 sleep $((FINAL_HOLD + 1))
 echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-echo "[6/7] 순차적 종료 시작 ($TIMESTAMP)"
+echo "[6/7] Starting sequential termination ($TIMESTAMP)"
 for (( step=0; step<$NUM_STEPS; step++ )); do
     CUR_CAR_NUM=${STEP_CARS[$step]}
     CUR_REMAIN_CAR_NUM=$((MAX_CAR_CNT - CUR_CAR_NUM))
-    echo "  - 차량 수 ${CUR_REMAIN_CAR_NUM}대로 감소"
+    echo "  - Decreasing car count to ${CUR_REMAIN_CAR_NUM}"
     clean_up_client "${PRODUCER_IDS[$step]}" $TERMINATE_TIMEOUT "async"
     clean_up_client "${LOAD_CONSUMER_IDS[$step]}" $TERMINATE_TIMEOUT "async"
     sleep $STEP_INTERVAL
@@ -504,7 +504,7 @@ done
 echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-echo "[7/7] Connect 및 측정용 Consumer 종료 ($TIMESTAMP)"
+echo "[7/7] Terminating Connect and measuring Consumer ($TIMESTAMP)"
 clean_up_connect $CONNECT_ID $TERMINATE_TIMEOUT
 clean_up_r_client $R_CONSUMER_ID $TERMINATE_TIMEOUT
 echo "--------------------------------------------------"
