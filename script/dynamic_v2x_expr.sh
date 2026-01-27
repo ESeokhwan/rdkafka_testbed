@@ -38,7 +38,7 @@ PRODUCER_EXEC=""
 TERMINATE_TIMEOUT=60
 
 STEP_CARS=(10 20 30 40 50 60 70 80 90 100 110 120)
-STEP_INTERVAL=5
+STEP_INTERVAL=20
 FINAL_HOLD=20
 
 INTERVAL_NOISE_RATE=0.0
@@ -135,20 +135,20 @@ if [ "$HELP" -eq 1 ]; then
     echo "      --connect-root <path>         Root directory on remote host where Connect is located. (Default: ./connect)"
     echo "      --connect-out <path>          Output root directory for Connect logs. (Default: {connect_root}/out)"
     echo "      --connect-temp <path>         Temporary root directory for Connect files. (Default: {connect_root}/temp)"
-    echo "      --connect-exec <path>         Executable path for Connect. (Default: {connect_root}/bin/Connect)"
+    echo "      --connect-exec <path>         Executable path for Connect. (Default: {connect_root}/bin/v2x_expr_mqtt_kafka_connector)"
     echo "      --r-client-host <user@host>   Remote host for Remote Clients execution. (Default: empty string for local)"
     echo "      --r-client-root <path>        Root directory on remote host where Remote Client is located. (Default: client)"
     echo "      --r-client-out <path>         Output root directory for Remote Client logs. (Default: {r_client_root}/out)"
     echo "      --r-client-temp <path>        Temporary root directory for Remote Client files. (Default: {r_client_root}/temp)"
-    echo "      --r-consumer-exec <name>      Executable name for Remote Consumer. (Default: {r_client_root}/bin/vehicle)"
+    echo "      --r-consumer-exec <name>      Executable name for Remote Consumer. (Default: {r_client_root}/bin/v2x_expr_consumer)"
     echo "      --client-root <path>          Root directory where Client is located. (Default: ./client)"
     echo "      --client-out <path>           Output root directory for Client logs. (Default: {client_root}/out)"
     echo "      --client-temp <path>          Temporary root directory for Client files. (Default: {client_root}/temp)"
-    echo "      --consumer-exec <path>        Executable path for Local Consumer. (Default: {client_root}/bin/vehicle)"
-    echo "      --producer-exec <path>        Executable path for Producer. (Default: {client_root}/bin/producer)"
+    echo "      --consumer-exec <path>        Executable path for Local Consumer. (Default: {client_root}/bin/v2x_expr_consumer)"
+    echo "      --producer-exec <path>        Executable path for Producer. (Default: {client_root}/bin/v2x_expr_mqtt_producer)"
     echo "      --terminate-timeout <seconds> Timeout second to wait before force killing (Default: 60)."
     echo "      --step-cars <num1,num2,...>   Comma-separated list of total car counts for each scaling step. (Default: (10,20,30,40,50,60,70,80,90,100,110,120))"
-    echo "      --step-interval <seconds>     Interval in seconds between each scaling step. (Default: 5)"
+    echo "      --step-interval <seconds>     Interval in seconds between each scaling step. (Default: 20)"
     echo "      --final-hold <seconds>        Hold time in seconds after reaching final scale before termination. (Default: 20)"
     echo "      --interval-noise-rate <f>     Standard deviation of noise to add to produce interval (Default: 0.0)"
     echo "  -v, --verbose                     Enable verbose output. (Config key: VERBOSE=1)"
@@ -256,7 +256,7 @@ if [ -z "$CONNECT_TEMP" ]; then
     CONNECT_TEMP=${CONNECT_ROOT}/temp
 fi
 if [ -z "$CONNECT_EXEC" ]; then
-    CONNECT_EXEC=${CONNECT_ROOT}/bin/Connect
+    CONNECT_EXEC=${CONNECT_ROOT}/bin/v2x_expr_mqtt_kafka_connector
 fi
 if [ -z "$R_CLIENT_OUT" ]; then
     R_CLIENT_OUT=${R_CLIENT_ROOT}/out
@@ -265,7 +265,7 @@ if [ -z "$R_CLIENT_TEMP" ]; then
     R_CLIENT_TEMP=${R_CLIENT_ROOT}/temp
 fi
 if [ -z "$R_CONSUMER_EXEC" ]; then
-    R_CONSUMER_EXEC=${R_CLIENT_ROOT}/bin/Vehicle
+    R_CONSUMER_EXEC=${R_CLIENT_ROOT}/bin/v2x_expr_consumer
 fi
 if [ -z "$CLIENT_OUT" ]; then
     CLIENT_OUT=${CLIENT_ROOT}/out
@@ -274,10 +274,10 @@ if [ -z "$CLIENT_TEMP" ]; then
     CLIENT_TEMP=${CLIENT_ROOT}/temp
 fi
 if [ -z "$CONSUMER_EXEC" ]; then
-    CONSUMER_EXEC=${CLIENT_ROOT}/bin/Vehicle
+    CONSUMER_EXEC=${CLIENT_ROOT}/bin/v2x_expr_consumer
 fi
 if [ -z "$PRODUCER_EXEC" ]; then
-    PRODUCER_EXEC=${CLIENT_ROOT}/bin/Producer
+    PRODUCER_EXEC=${CLIENT_ROOT}/bin/v2x_expr_mqtt_producer
 fi
 
 # --- Script Logic ---

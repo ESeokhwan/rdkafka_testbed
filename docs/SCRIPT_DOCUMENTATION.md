@@ -28,17 +28,17 @@ The following options are common to both `mqtt_static_v2x_test.sh` and `dynamic_
 | `--connect-root <path>` | `CONNECT_ROOT` | Root directory on the remote/local host where the Connector application is located. | `./connect` |
 | `--connect-out <path>` | `CONNECT_OUT` | Output directory for Connector logs. | `{connect-root}/out` |
 | `--connect-temp <path>` | `CONNECT_TEMP` | Temporary directory for Connector files (e.g., PID files). | `{connect-root}/temp` |
-| `--connect-exec <path>` | `CONNECT_EXEC` | Path to the Connector executable. | `{connect-root}/bin/Connect` |
+| `--connect-exec <path>` | `CONNECT_EXEC` | Path to the Connector executable. | `{connect-root}/bin/v2x_expr_mqtt_kafka_connector` |
 | `--r-client-host <user@host>`| `R_CLIENT_HOST` | Remote host (`user@ip`) for executing the Metric Consumer clients. If empty, runs locally. | `""` |
 | `--r-client-root <path>` | `R_CLIENT_ROOT` | Root directory on the remote/local host where the remote client applications are located. | `client` |
 | `--r-client-out <path>` | `R_CLIENT_OUT` | Output directory for remote client logs. | `{r-client-root}/out` |
 | `--r-client-temp <path>` | `R_CLIENT_TEMP` | Temporary directory for remote client files (e.g., PID files). | `{r-client-root}/temp` |
-| `--r-consumer-exec <name>` | `R_CONSUMER_EXEC` | Executable name for the Metric Consumer (remote). | `{r-client-root}/bin/Vehicle` |
+| `--r-consumer-exec <name>` | `R_CONSUMER_EXEC` | Executable name for the Metric Consumer (remote). | `{r-client-root}/bin/v2x_expr_consumer` |
 | `--client-root <path>` | `CLIENT_ROOT` | Root directory where local client applications are located. | `./client` |
 | `--client-out <path>` | `CLIENT_OUT` | Output directory for local client logs. | `{client-root}/out` |
 | `--client-temp <path>` | `CLIENT_TEMP` | Temporary directory for local client files (e.g., PID files). | `{client-root}/temp` |
-| `--consumer-exec <path>` | `CONSUMER_EXEC` | Path to the Stress Consumer executable (local). | `{client-root}/bin/Vehicle` |
-| `--producer-exec <path>` | `PRODUCER_EXEC` | Path to the Producer executable (local). | `{client-root}/bin/Producer` |
+| `--consumer-exec <path>` | `CONSUMER_EXEC` | Path to the Stress Consumer executable (local). | `{client-root}/bin/v2x_expr_consumer` |
+| `--producer-exec <path>` | `PRODUCER_EXEC` | Path to the Producer executable (local). | `{client-root}/bin/v2x_expr_mqtt_producer` |
 | `--terminate-timeout <sec>` | `TERMINATE_TIMEOUT` | Timeout in seconds to wait before force-killing background processes during cleanup. | `60` |
 | `--interval-noise-rate <f>` | `INTERVAL_NOISE_RATE` | Standard deviation of noise to add to the producer's message interval, as a rate of the interval. | `0.0` |
 | `-v`, `--verbose` | `VERBOSE` | Enable verbose output, printing all configuration values and script actions. | `0` (off) |
@@ -64,5 +64,5 @@ This script (named `dynamic_v2x_expr.sh` in the filesystem) runs the dynamic V2X
 | Option | Config Key | Description | Default |
 |---|---|---|---|
 | `--step-cars <n1,n2,...>` | `STEP_CARS` | A comma-separated string of total client counts for each scaling step. The load will increase to match these numbers sequentially. | `(10,20,30,40,50,60,70,80,90,100,110,120)` |
-| `--step-interval <sec>` | `STEP_INTERVAL`| The interval in seconds to wait between each scaling step (both up and down). | `5` |
+| `--step-interval <sec>` | `STEP_INTERVAL`| The interval in seconds to wait between each scaling step (both up and down). | `20` |
 | `--final-hold <sec>` | `FINAL_HOLD` | The duration in seconds to hold the test at the peak client count before starting to scale down. | `20` |

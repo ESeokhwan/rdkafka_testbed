@@ -134,17 +134,17 @@ if [ "$HELP" -eq 1 ]; then
     echo "      --connect-root <path>         Root directory on remote host where Connect is located. (Default: ./connect)"
     echo "      --connect-out <path>          Output root directory for Connect logs. (Default: {connect_root}/out)"
     echo "      --connect-temp <path>         Temporary root directory for Connect files. (Default: {connect_root}/temp)"
-    echo "      --connect-exec <path>         Executable path for Connect. (Default: {connect_root}/bin/Connect)"
+    echo "      --connect-exec <path>         Executable path for Connect. (Default: {connect_root}/bin/v2x_expr_mqtt_kafka_connector)"
     echo "      --r-client-host <user@host>   Remote host for Remote Clients execution. (Default: empty string for local)"
     echo "      --r-client-root <path>        Root directory on remote host where Remote Client is located. (Default: client)"
     echo "      --r-client-out <path>         Output root directory for Remote Client logs. (Default: {r_client_root}/out)"
     echo "      --r-client-temp <path>        Temporary root directory for Remote Client files. (Default: {r_client_root}/temp)"
-    echo "      --r-consumer-exec <name>      Executable name for Remote Consumer. (Default: {r_client_root}/bin/vehicle)"
+    echo "      --r-consumer-exec <name>      Executable name for Remote Consumer. (Default: {r_client_root}/bin/v2x_expr_consumer)"
     echo "      --client-root <path>          Root directory where Client is located. (Default: ./client)"
     echo "      --client-out <path>           Output root directory for Client logs. (Default: {client_root}/out)"
     echo "      --client-temp <path>          Temporary root directory for Client files. (Default: {client_root}/temp)"
-    echo "      --consumer-exec <path>        Executable path for Local Consumer. (Default: {client_root}/bin/vehicle)"
-    echo "      --producer-exec <path>        Executable path for Producer. (Default: {client_root}/bin/producer)"
+    echo "      --consumer-exec <path>        Executable path for Local Consumer. (Default: {client_root}/bin/v2x_expr_consumer)"
+    echo "      --producer-exec <path>        Executable path for Producer. (Default: {client_root}/bin/v2x_expr_mqtt_producer)"
     echo "      --terminate-timeout <seconds> Timeout second to wait before force killing (Default: 60)."
     echo "  -d, --duration <seconds>          Duration for the test run. (Default: 100)"
     echo "      --num-car <num1,num2,...>     Comma-separated list of car counts for the test. (Default: (10))"
@@ -251,7 +251,7 @@ if [ -z "$CONNECT_TEMP" ]; then
     CONNECT_TEMP=${CONNECT_ROOT}/temp
 fi
 if [ -z "$CONNECT_EXEC" ]; then
-    CONNECT_EXEC=${CONNECT_ROOT}/bin/Connect
+    CONNECT_EXEC=${CONNECT_ROOT}/bin/v2x_expr_mqtt_kafka_connector
 fi
 if [ -z "$R_CLIENT_OUT" ]; then
     R_CLIENT_OUT=${R_CLIENT_ROOT}/out
@@ -260,7 +260,7 @@ if [ -z "$R_CLIENT_TEMP" ]; then
     R_CLIENT_TEMP=${R_CLIENT_ROOT}/temp
 fi
 if [ -z "$R_CONSUMER_EXEC" ]; then
-    R_CONSUMER_EXEC=${R_CLIENT_ROOT}/bin/Vehicle
+    R_CONSUMER_EXEC=${R_CLIENT_ROOT}/bin/v2x_expr_consumer
 fi
 if [ -z "$CLIENT_OUT" ]; then
     CLIENT_OUT=${CLIENT_ROOT}/out
@@ -269,10 +269,10 @@ if [ -z "$CLIENT_TEMP" ]; then
     CLIENT_TEMP=${CLIENT_ROOT}/temp
 fi
 if [ -z "$CONSUMER_EXEC" ]; then
-    CONSUMER_EXEC=${CLIENT_ROOT}/bin/Vehicle
+    CONSUMER_EXEC=${CLIENT_ROOT}/bin/v2x_expr_consumer
 fi
 if [ -z "$PRODUCER_EXEC" ]; then
-    PRODUCER_EXEC=${CLIENT_ROOT}/bin/Producer
+    PRODUCER_EXEC=${CLIENT_ROOT}/bin/v2x_expr_mqtt_producer
 fi
 
 # --- Script Logic ---
