@@ -1,5 +1,3 @@
-#pragma once
-
 #include "connector/mqtt_kafka_connector.h"
 
 #include <stdexcept>
@@ -14,6 +12,7 @@ RdKafka::Producer *create_kafka_producer(std::string brokers, std::string client
 mosquitto *create_mosq_client(
     std::string broker,
     std::string client_id,
+    void *obj,
     void (*on_connect)(struct mosquitto *, void *, int),
     void (*on_message)(struct mosquitto *, void *, const struct mosquitto_message *)
 );
@@ -29,7 +28,7 @@ MqttKafkaConnector::MqttKafkaConnector(
     std::string sink_topic
 ): id(id), source_topic(source_topic), sink_topic(sink_topic) {
     kafka_producer = create_kafka_producer(kafka_broker, id + "_connector");
-    mqtt_client = create_mosq_client(mqtt_broker, id + "_connector", on_connect, on_message);
+    mqtt_client = create_mosq_client(mqtt_broker, id + "_connector", this, on_connect, on_message);
 }
 
 MqttKafkaConnector::~MqttKafkaConnector() {
@@ -116,10 +115,11 @@ RdKafka::Producer *create_kafka_producer(std::string brokers, std::string client
 mosquitto *create_mosq_client(
     std::string broker,
     std::string client_id,
+    void *obj,
     void (*on_connect)(struct mosquitto *, void *, int),
     void (*on_message)(struct mosquitto *, void *, const struct mosquitto_message *)
 ) {
-    mosquitto *mosq = mosquitto_new(client_id.c_str(), true, nullptr);
+    mosquitto *mosq = mosquitto_new(client_id.c_str(), true, obj);
     if (!mosq) {
         throw std::runtime_error("Failed to create Mosquitto instance");
     }
