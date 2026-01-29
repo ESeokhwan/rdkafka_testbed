@@ -389,7 +389,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
         --out-dir $R_CLIENT_OUT --temp-dir $R_CLIENT_TEMP $VERBOSE_TAG \
         --exec-path $R_CONSUMER_EXEC -- \
             --broker $KAFKA_BROKER --group-prefix 'r_group_' \
-            --client-cnt -1 --running-time $INF_DURATION \
+            --client-cnt -1 --start-idx 1 --running-time $INF_DURATION \
             --outdir $R_CLIENT_OUT --out-prefix '${CURRENT_CAR_NUM}C_' $VERBOSE_TAG"
     if [ $R_CLIENT_HOST == "" ]; then
         $R_CONSUMER_COMMAND
@@ -405,7 +405,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
         --out-dir $CLIENT_OUT --temp-dir $CLIENT_TEMP $VERBOSE_TAG \
         --exec-path $CONSUMER_EXEC -- \
             --broker $KAFKA_BROKER --group-prefix "group_" \
-            --client-cnt $CURRENT_CAR_NUM --running-time $INF_DURATION \
+            --client-cnt $CURRENT_CAR_NUM --start-idx 1 --running-time $INF_DURATION \
             --outdir $CLIENT_OUT --out-prefix "${CURRENT_CAR_NUM}C_" --no-log $VERBOSE_TAG
     echo "--------------------------------------------------"
 
@@ -422,7 +422,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     echo "[6/7] Executing Producer ($TIMESTAMP)"
-    $PRODUCER_EXEC --broker $MQTT_BROKER --client-cnt $CURRENT_CAR_NUM \
+    $PRODUCER_EXEC --broker $MQTT_BROKER --client-cnt $CURRENT_CAR_NUM --start-idx 1 \
         --running-time $DURATION --interval-noise-stddev-rate $INTERVAL_NOISE_RATE $VERBOSE_TAG
     echo "--------------------------------------------------"
 
