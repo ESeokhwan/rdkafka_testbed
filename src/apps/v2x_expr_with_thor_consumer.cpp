@@ -180,7 +180,7 @@ void V2xExprConsumerApp::init_clients() {
         consumer_thread_args[i].broker = args.broker;
         consumer_thread_args[i].group_id = args.group_prefix + to_string(cur_idx);
         consumer_thread_args[i].client_id = args.topic_prefix + service_args[assigned_idx[i]].name.substr(1) + "_" + to_string(cur_idx);
-        consumer_thread_args[i].topics.push_back(args.topic_prefix + service_args[assigned_idx[i]].name);
+        consumer_thread_args[i].topics.push_back(args.topic_prefix + service_args[assigned_idx[i]].name.substr(1));
         consumer_thread_args[i].start_signal = &start_signal;
         consumer_thread_args[i].end_flag = &end_flag;
         consumer_thread_args[i].verbose = args.verbose;
