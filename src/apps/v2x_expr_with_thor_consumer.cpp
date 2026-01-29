@@ -139,10 +139,10 @@ int main(int argc, char *argv[]) {
     }
 
     vector<struct ServiceArg> service_args = {
-        {"Information_Sharing", 100},
-        {"Sensor_Sharing", 100},
-        {"Platooning_Lowest", 25},
-        {"Platooning_Lower", 20},
+        {"0Sensor_Sharing", 100},
+        {"1Information_Sharing", 100},
+        {"2Platooning_Lowest", 25},
+        {"3Platooning_Lower", 20},
     };
 
     shared_ptr<moniq::MonitorQueue> monitor_queue = make_shared<moniq::MonitorQueue>();
@@ -179,7 +179,7 @@ void V2xExprConsumerApp::init_clients() {
         int cur_idx = args.start_idx + i;
         consumer_thread_args[i].broker = args.broker;
         consumer_thread_args[i].group_id = args.group_prefix + to_string(cur_idx);
-        consumer_thread_args[i].client_id = args.topic_prefix + service_args[assigned_idx[i]].name + "_" + to_string(cur_idx);
+        consumer_thread_args[i].client_id = args.topic_prefix + service_args[assigned_idx[i]].name.substr(1) + "_" + to_string(cur_idx);
         consumer_thread_args[i].topics.push_back(args.topic_prefix + service_args[assigned_idx[i]].name);
         consumer_thread_args[i].start_signal = &start_signal;
         consumer_thread_args[i].end_flag = &end_flag;

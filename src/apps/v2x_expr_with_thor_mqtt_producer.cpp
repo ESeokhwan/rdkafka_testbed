@@ -92,10 +92,10 @@ public:
 namespace {
     V2xMqttExprProducerApp *app;
     vector<ServiceInfo> service_infos = {
-        {"3Platooning_lower", 1000.0/50.0, 6500},
-        {"2Platooning_lowest", 1000.0/30.0, 400},
-        {"1Info_sharing", 1000.0/10.0, 1600},
-        {"0Sensor_sharing", 1000.0/10.0, 1600},
+        {"3Platooning_Lower", 1000.0/50.0, 6500},
+        {"2Platooning_Lowest", 1000.0/30.0, 400},
+        {"1Information_Sharing", 1000.0/10.0, 1600},
+        {"0Sensor_Sharing", 1000.0/10.0, 1600},
     };
 
     Arguments parse_arguments(int argc, char **argv);
