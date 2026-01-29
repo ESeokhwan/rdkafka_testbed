@@ -18,7 +18,7 @@ std::string ExtractOnlyStatSumMonitorMessageAdaptor::generate_with_root_adaptor(
 }
 
 std::string ExtractOnlyStatSumMonitorMessageAdaptor::generate_with_root_adaptor(std::string message_id, double requested_at, std::string service_name) {
-    return root_adaptor.generate(message_id, requested_at, { { SERVICE_KEY, service_name } });
+    return root_adaptor.generate(message_id, requested_at, { { SERVICE_KEY, service_name }, { service_name, "" } });
 }
 
 std::string ExtractOnlyStatSumMonitorMessageAdaptor::extract_content_with_root_adaptor(const std::string& message) const {
@@ -42,7 +42,7 @@ std::string StatSumMonitorMessageGenerator::generate_with_root_adaptor(std::stri
 }
 
 std::string StatSumMonitorMessageGenerator::generate_with_root_adaptor(std::string message_id, double requested_at, std::string service_name) {
-    return root_adaptor.generate(message_id, requested_at, { { SERVICE_KEY, service_name } });
+    return root_adaptor.generate(message_id, requested_at, { { SERVICE_KEY, service_name }, { service_name, "" } });
 }
 
 std::string StatSumMonitorMessageGenerator::extract_content_with_root_adaptor(const std::string& message) const {
