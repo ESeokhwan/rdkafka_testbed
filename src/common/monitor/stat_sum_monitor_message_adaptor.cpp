@@ -22,15 +22,21 @@ std::string ExtractOnlyStatSumMonitorMessageAdaptor::generate_with_root_adaptor(
 }
 
 std::string ExtractOnlyStatSumMonitorMessageAdaptor::extract_content_with_root_adaptor(const std::string& message) const {
-    return root_adaptor.extract_content(message);
+    size_t splitPos = message.find(0x02);
+    if (splitPos == std::string::npos) return root_adaptor.extract_content(message);
+    return root_adaptor.extract_content(message.substr(0, splitPos));
 }
 
 double ExtractOnlyStatSumMonitorMessageAdaptor::extract_requested_at_with_root_adaptor(const std::string& message) const {
-    return root_adaptor.extract_requested_at(message);
+    size_t splitPos = message.find(0x02);
+    if (splitPos == std::string::npos) return root_adaptor.extract_requested_at(message);
+    return root_adaptor.extract_requested_at(message.substr(0, splitPos));
 }
 
 std::string ExtractOnlyStatSumMonitorMessageAdaptor::extract_service_name_with_root_adaptor(const std::string& message) const {
-    return root_adaptor.extract_other_kvs(message, SERVICE_KEY);
+    size_t splitPos = message.find(0x02);
+    if (splitPos == std::string::npos) return root_adaptor.extract_other_kvs(message, SERVICE_KEY);
+    return root_adaptor.extract_other_kvs(message.substr(0, splitPos), SERVICE_KEY);
 }
 
 std::string StatSumMonitorMessageGenerator::generate_with_root_adaptor(std::string message_id) {
@@ -46,15 +52,21 @@ std::string StatSumMonitorMessageGenerator::generate_with_root_adaptor(std::stri
 }
 
 std::string StatSumMonitorMessageGenerator::extract_content_with_root_adaptor(const std::string& message) const {
-    return root_adaptor.extract_content(message);
+    size_t splitPos = message.find(0x02);
+    if (splitPos == std::string::npos) return root_adaptor.extract_content(message);
+    return root_adaptor.extract_content(message.substr(0, splitPos));
 }
 
 double StatSumMonitorMessageGenerator::extract_requested_at_with_root_adaptor(const std::string& message) const {
-    return root_adaptor.extract_requested_at(message);
+    size_t splitPos = message.find(0x02);
+    if (splitPos == std::string::npos) return root_adaptor.extract_requested_at(message);
+    return root_adaptor.extract_requested_at(message.substr(0, splitPos));
 }
 
 std::string StatSumMonitorMessageGenerator::extract_service_name_with_root_adaptor(const std::string& message) const {
-    return root_adaptor.extract_other_kvs(message, SERVICE_KEY);
+    size_t splitPos = message.find(0x02);
+    if (splitPos == std::string::npos) return root_adaptor.extract_other_kvs(message, SERVICE_KEY);
+    return root_adaptor.extract_other_kvs(message.substr(0, splitPos), SERVICE_KEY);
 }
 
 }
