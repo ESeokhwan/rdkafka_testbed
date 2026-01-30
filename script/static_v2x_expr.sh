@@ -438,8 +438,8 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
         --running-time $DURATION --interval-noise-stddev-rate $INTERVAL_NOISE_RATE $VERBOSE_TAG
     echo "--------------------------------------------------"
 
-    GAURD_TIME=3
-    echo "Waiting for ${GAURD_TIME} seconds before next operation..."
+    GAURD_TIME=35
+    echo "Waiting for ${GAURD_TIME} seconds before terminating consumers..."
     sleep $GAURD_TIME
     echo "--------------------------------------------------"
 
