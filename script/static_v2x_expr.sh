@@ -42,6 +42,7 @@ DURATION=100
 NUM_CAR=(10)
 
 INTERVAL_NOISE_RATE=0.0
+MONITORING_EPOCH_SIZE=1000.0
 
 VERBOSE=0
 HELP=0
@@ -53,7 +54,7 @@ TEMP=$(getopt -o d:vh --longoptions \
     connector-host:, connector-root:, connector-out:, connector-temp:, connector-exec:, \
     r-client-host:, r-client-root:, r-client-out:, r-client-temp:, r-consumer-exec:, \
     client-root:, client-out:, client-temp:, consumer-exec:, producer-exec:, duration:, \
-    num-car:, interval-noise-rate:, terminate-timeout:" \
+    num-car:, interval-noise-rate:, monitoring-epoch-size:, terminate-timeout:" \
     -n 'myscript' -- "$@" \
 )
 
@@ -83,6 +84,7 @@ CL_TERMINATE_TIMEOUT=""
 CL_DURATION=""
 CL_NUM_CAR=()
 CL_INTERVAL_NOISE_RATE=""
+CL_MONITORING_EPOCH_SIZE=""
 CL_VERBOSE=""
 
 # Process arguments and store them in temporary variables
@@ -111,6 +113,7 @@ while true ; do
         -d|--duration) CL_DURATION="$2" ; shift 2 ;;
         --num-car) IFS=',' read -r -a CL_NUM_CAR <<< "$2" ; shift 2 ;;
         --interval-noise-rate) CL_INTERVAL_NOISE_RATE="$2" ; shift 2 ;;
+        --monitoring-epoch-size) CL_MONITORING_EPOCH_SIZE="$2" ; shift 2 ;;
         -v|--verbose) CL_VERBOSE=1 ; shift ;;
         -h|--help) HELP=1 ; shift ;;
         --) shift ; break ;;
@@ -148,6 +151,7 @@ if [ "$HELP" -eq 1 ]; then
     echo "  -d, --duration <seconds>          Duration for the test run. (Default: 100)"
     echo "      --num-car <num1,num2,...>     Comma-separated list of car counts for the test. (Default: (10))"
     echo "      --interval-noise-rate <f>     Standard deviation of noise to add to produce interval (Default: 0.0)"
+    echo "      --monitoring-epoch-size <f>   Epoch size in milli seconds of calculating throughput, reliability, and more. (Default: 1000.0)"
     echo "  -v, --verbose                     Enable verbose output. (Config key: VERBOSE=1)"
     echo "  -h, --help                        Display this help message and exit."
     echo ""
@@ -238,6 +242,9 @@ fi
 if [ -n "$CL_INTERVAL_NOISE_RATE" ]; then
     INTERVAL_NOISE_RATE="$CL_INTERVAL_NOISE_RATE"
 fi
+if [ -n "$CL_MONITORING_EPOCH_SIZE" ]; then
+    MONITORING_EPOCH_SIZE="$CL_MONITORING_EPOCH_SIZE"
+fi
 if [ -n "$CL_VERBOSE" ]; then
     VERBOSE="$CL_VERBOSE"
 fi
@@ -299,6 +306,7 @@ if [ "$VERBOSE" -eq 1 ]; then
     echo "Duration:               $DURATION"
     echo "Num Car:                $NUM_CAR"
     echo "Interval Noise Rate:    $INTERVAL_NOISE_RATE"
+    echo "Monitoring Epoch Size:  $MONITORING_EPOCH_SIZE"
     echo "Verbose Mode:           $VERBOSE"
     echo "--------------------------"
 
@@ -392,7 +400,8 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
         --exec-path $R_CONSUMER_EXEC -- \
             --broker $KAFKA_BROKER --group-prefix 'r_group_' \
             --client-cnt -1 --running-time $INF_DURATION \
-            --outdir $R_CLIENT_OUT --out-prefix '${CURRENT_CAR_NUM}C_' $VERBOSE_TAG"
+            --outdir $R_CLIENT_OUT --out-prefix '${CURRENT_CAR_NUM}C_' \
+            --monitoring-epoch-size $MONITORING_EPOCH_SIZE $VERBOSE_TAG"
     if [ $R_CLIENT_HOST == "" ]; then
         $R_CONSUMER_COMMAND
     else
@@ -408,7 +417,8 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
         --exec-path $CONSUMER_EXEC -- \
             --broker $KAFKA_BROKER --group-prefix "group_" \
             --client-cnt $CURRENT_CAR_NUM --running-time $INF_DURATION \
-            --outdir $CLIENT_OUT --out-prefix "${CURRENT_CAR_NUM}C_" --no-log $VERBOSE_TAG
+            --outdir $CLIENT_OUT --out-prefix "${CURRENT_CAR_NUM}C_" --no-log \
+            --monitoring-epoch-size $MONITORING_EPOCH_SIZE $VERBOSE_TAG
     echo "--------------------------------------------------"
 
     GAURD_TIME=3

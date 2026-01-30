@@ -35,6 +35,8 @@ struct Arguments {
     bool scrapable;
     bool log_disabled;
     bool read_tagged_only;
+    double monitoring_epoch_size;
+
     bool verbose;
 
     int start_barrier_delay;
@@ -134,6 +136,7 @@ int main(int argc, char *argv[]) {
             << "Scrapable: " << (args.scrapable ? "on" : "off") << "\n"
             << "No logging: " << (args.log_disabled ? "on" : "off") << "\n"
             << "Log Sampling: " << (args.read_tagged_only ? "on" : "off") << "\n"
+            << "Monitoring Epoch Size: " << args.monitoring_epoch_size << "\n"
             << "Output Directory: " << args.outdir
             << "Output File Prefix: " << args.out_prefix << endl;
     }
@@ -147,7 +150,7 @@ int main(int argc, char *argv[]) {
 
     shared_ptr<moniq::MonitorQueue> monitor_queue = make_shared<moniq::MonitorQueue>();
     shared_ptr<moniq::writer::IMonitorLogWriteStrategy> write_strategy =
-        make_shared<monitor::StatSumPerSecMonitorLogWriteStrategy>(generate_services(service_args, args.outdir, args.out_prefix));
+        make_shared<monitor::StatSumPerSecMonitorLogWriteStrategy>(generate_services(service_args, args.outdir, args.out_prefix), args.monitoring_epoch_size);
     shared_ptr<moniq::writer::MonitorLogWriter> writer = make_shared<moniq::writer::MonitorLogWriter>(monitor_queue, write_strategy, -1, -1);
     shared_ptr<common::monitor::IStatSumMonitorMessageAdaptor> message_adaptor = make_shared<common::monitor::ExtractOnlyStatSumMonitorMessageAdaptor>();
 
@@ -302,6 +305,7 @@ Arguments parse_arguments(int argc, char** argv) {
     args.scrapable = false;
     args.log_disabled = false;
     args.read_tagged_only = false;
+    args.monitoring_epoch_size = 1000.0;
     args.verbose = false;
 
     static vector<util::OptionWrapper> options = {
@@ -316,6 +320,7 @@ Arguments parse_arguments(int argc, char** argv) {
         util::SCRAPABLE_OPTION,
         util::NO_LOG_OPTION,
         util::READ_TAGGED_ONLY_OPTION,
+        util::MONITORING_EPOCH_SIZE_OPTION,
         util::OUTDIR_OPTION,
         util::OUT_PREFIX_OPTION,
         util::VERBOSE_OPTION,
@@ -336,6 +341,7 @@ Arguments parse_arguments(int argc, char** argv) {
             case util::SCRAPABLE_OPTION.get_val(): args.scrapable = true; break;
             case util::NO_LOG_OPTION.get_val(): args.log_disabled = true; break;
             case util::READ_TAGGED_ONLY_OPTION.get_val(): args.read_tagged_only = true; break;
+            case util::MONITORING_EPOCH_SIZE_OPTION.get_val(): args.monitoring_epoch_size = atoi(optarg); break;
             case util::OUTDIR_OPTION.get_val(): args.outdir = optarg; break;
             case util::OUT_PREFIX_OPTION.get_val(): args.out_prefix = optarg; break;
             case util::VERBOSE_OPTION.get_val(): args.verbose = true; break;

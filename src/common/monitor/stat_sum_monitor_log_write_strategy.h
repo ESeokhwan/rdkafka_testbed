@@ -34,6 +34,7 @@ typedef struct ProcessedLog {
 
 typedef struct Statistics {
     std::size_t record_cnt;
+    double epoch_size;
     double reliability;
     double avg_latency;
     double p90_latency;
@@ -45,9 +46,10 @@ class StatSumPerSecMonitorLogWriteStrategy : public moniq::writer::IMonitorLogWr
 private:
     std::map<std::string, ServiceInfo> services_;
     std::map<std::string, std::vector<ProcessedLog>> processed_logs_map_;
+    double epoch_size_ms_;
 
 public:
-    StatSumPerSecMonitorLogWriteStrategy(std::vector<ServiceInfo> services);
+    StatSumPerSecMonitorLogWriteStrategy(std::vector<ServiceInfo> services, double epoch_size_ms);
 
     ~StatSumPerSecMonitorLogWriteStrategy() = default;
 
