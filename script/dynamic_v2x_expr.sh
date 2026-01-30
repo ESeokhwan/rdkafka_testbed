@@ -513,6 +513,11 @@ for (( step=0; step<$NUM_STEPS; step++ )); do
 done
 echo "--------------------------------------------------"
 
+GAURD_TIME=35
+echo "Waiting for ${GAURD_TIME} seconds before terminating consumers..."
+sleep $GAURD_TIME
+echo "--------------------------------------------------"
+
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 echo "[7/7] Terminating Connector and measuring Consumer ($TIMESTAMP)"
 clean_up_connector $CONNECTOR_ID $TERMINATE_TIMEOUT
