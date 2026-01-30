@@ -63,7 +63,7 @@ bool StatSumPerSecMonitorLogWriteStrategy::commit() {
             << " Reliability=" << (stat.reliability * 100.0) << "%"
             << std::endl;
 
-        *service.per_sec_ostream << "SecondEpoch,Total,Rel,AvgLatency,P90Latency,P99Latency\n";
+        *service.per_sec_ostream << "SecondEpoch,Total,Througput,Rel,AvgLatency,P90Latency,P99Latency\n";
         std::map<double, std::vector<ProcessedLog>> logs_map_by_epoch = devide_logs_by_epoch(processed_logs, epoch_size_ms_);
         for (const auto& [cur_epoch_sec, logs]: logs_map_by_epoch) {
             Statistics stat = calc_statistics(logs, service.threshold, epoch_size_ms_);
