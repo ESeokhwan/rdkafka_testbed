@@ -345,7 +345,7 @@ Arguments parse_arguments(int argc, char** argv) {
             case util::SCRAPABLE_OPTION.get_val(): args.scrapable = true; break;
             case util::NO_LOG_OPTION.get_val(): args.log_disabled = true; break;
             case util::READ_TAGGED_ONLY_OPTION.get_val(): args.read_tagged_only = true; break;
-            case util::MONITORING_EPOCH_SIZE_OPTION.get_val(): args.monitoring_epoch_size = atoi(optarg); break;
+            case util::MONITORING_EPOCH_SIZE_OPTION.get_val(): args.monitoring_epoch_size = atof(optarg); break;
             case util::OUTDIR_OPTION.get_val(): args.outdir = optarg; break;
             case util::OUT_PREFIX_OPTION.get_val(): args.out_prefix = optarg; break;
             case util::VERBOSE_OPTION.get_val(): args.verbose = true; break;
