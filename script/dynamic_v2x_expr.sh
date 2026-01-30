@@ -42,6 +42,7 @@ STEP_INTERVAL=20
 FINAL_HOLD=20
 
 INTERVAL_NOISE_RATE=0.0
+MONITORING_EPOCH_SIZE=1000.0
 
 VERBOSE=0
 HELP=0
@@ -53,7 +54,7 @@ TEMP=$(getopt -o d:vh --longoptions \
     connector-host:, connector-root:, connector-out:, connector-temp:, connector-exec:, \
     r-client-host:, r-client-root:, r-client-out:, r-client-temp:, r-consumer-exec:, \
     client-root:, client-out:, client-temp:, consumer-exec:, producer-exec:, step-cars:, \
-    step-interval:, final-hold:, interval-noise-rate:, terminate-timeout:" \
+    step-interval:, final-hold:, interval-noise-rate:, monitoring-epoch-size:, terminate-timeout:" \
     -n 'myscript' -- "$@" \
 )
 
@@ -84,6 +85,7 @@ CL_STEP_CARS=()
 CL_STEP_INTERVAL=""
 CL_FINAL_HOLD=""
 CL_INTERVAL_NOISE_RATE=""
+CL_MONITORING_EPOCH_SIZE=""
 CL_VERBOSE=""
 
 # Process arguments and store them in temporary variables
@@ -113,6 +115,7 @@ while true ; do
         --step-interval) CL_STEP_INTERVAL="$2" ; shift 2 ;;
         --final-hold) CL_FINAL_HOLD="$2" ; shift 2 ;;
         --interval-noise-rate) CL_INTERVAL_NOISE_RATE="$2" ; shift 2 ;;
+        --monitoring-epoch-size) CL_MONITORING_EPOCH_SIZE="$2" ; shift 2 ;;
         -v|--verbose) CL_VERBOSE=1 ; shift ;;
         -h|--help) HELP=1 ; shift ;;
         --) shift ; break ;;
@@ -151,6 +154,7 @@ if [ "$HELP" -eq 1 ]; then
     echo "      --step-interval <seconds>     Interval in seconds between each scaling step. (Default: 20)"
     echo "      --final-hold <seconds>        Hold time in seconds after reaching final scale before termination. (Default: 20)"
     echo "      --interval-noise-rate <f>     Standard deviation of noise to add to produce interval (Default: 0.0)"
+    echo "      --monitoring-epoch-size <f>   Epoch size in milli seconds of calculating throughput, reliability, and more. (Default: 1000.0)"
     echo "  -v, --verbose                     Enable verbose output. (Config key: VERBOSE=1)"
     echo "  -h, --help                        Display this help message and exit."
     echo ""
@@ -244,6 +248,9 @@ fi
 if [ -n "$CL_INTERVAL_NOISE_RATE" ]; then
     INTERVAL_NOISE_RATE="$CL_INTERVAL_NOISE_RATE"
 fi
+if [ -n "$CL_MONITORING_EPOCH_SIZE" ]; then
+    MONITORING_EPOCH_SIZE="$CL_MONITORING_EPOCH_SIZE"
+fi
 if [ -n "$CL_VERBOSE" ]; then
     VERBOSE="$CL_VERBOSE"
 fi
@@ -306,6 +313,7 @@ if [ "$VERBOSE" -eq 1 ]; then
     echo "Step Interval:          $STEP_INTERVAL"
     echo "Final Hold:             $FINAL_HOLD"
     echo "Interval Noise Rate:    $INTERVAL_NOISE_RATE"
+    echo "Monitoring Epoch Size:  $MONITORING_EPOCH_SIZE"
     echo "Verbose Mode:           $VERBOSE"
     echo "--------------------------"
 
@@ -332,6 +340,7 @@ start_load_consumers() {
             --broker $KAFKA_BROKER --group-prefix "group_" \
             --client-cnt $((to-from)) --start-idx $from --running-time $INF_DURATION \
             --outdir $CLIENT_OUT --out-prefix "${from}_${to}C_" --no-log \
+            --monitoring-epoch-size $MONITORING_EPOCH_SIZE \
             --start-barrier-delay 1 $VERBOSE_TAG &
     LOAD_CONSUMER_IDS+=("$load_consumer_id")
 }
@@ -460,7 +469,8 @@ R_CONSUMER_COMMAND="$R_CLIENT_ROOT/script/run-on-bg.sh --id $R_CONSUMER_ID \
     --exec-path $R_CONSUMER_EXEC -- \
         --broker $KAFKA_BROKER --group-prefix 'r_group_' \
         --client-cnt -1 --running-time $INF_DURATION \
-        --outdir $R_CLIENT_OUT --out-prefix 'Dynamic_' $VERBOSE_TAG"
+        --outdir $R_CLIENT_OUT --out-prefix 'Dynamic_' \
+        --monitoring-epoch-size $MONITORING_EPOCH_SIZE $VERBOSE_TAG"
 if [ $R_CLIENT_HOST == "" ]; then
     $R_CONSUMER_COMMAND
 else

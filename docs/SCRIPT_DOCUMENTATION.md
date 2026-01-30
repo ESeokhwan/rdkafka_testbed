@@ -41,6 +41,7 @@ The following options are common to both `static_v2x_expr.sh` and `dynamic_v2x_e
 | `--producer-exec <path>` | `PRODUCER_EXEC` | Path to the Producer executable (local). | `{client-root}/bin/v2x_expr_mqtt_producer` |
 | `--terminate-timeout <sec>` | `TERMINATE_TIMEOUT` | Timeout in seconds to wait before force-killing background processes during cleanup. | `60` |
 | `--interval-noise-rate <f>` | `INTERVAL_NOISE_RATE` | Standard deviation of noise to add to the producer's message interval, as a rate of the interval. | `0.0` |
+| `--monitoring-epoch-size <ms>` | `MONITORING_EPOCH_SIZE` | Epoch size in milli seconds of calculating throughput, reliability, and more. | `1000.0` |
 | `-v`, `--verbose` | `VERBOSE` | Enable verbose output, printing all configuration values and script actions. | `0` (off) |
 | `-h`, `--help` | `HELP` | Display the help message for the script and exit. | N/A |
 

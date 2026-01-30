@@ -34,6 +34,7 @@ enum class LongOnlyOptionVals {
     WARMUP_TOPIC,
     START_BARRIER_DELAY,
     MONITORING_BATCH_SIZE,
+    MONITORING_EPOCH_SIZE,
     SERVICE_RUNNER_POOL_SIZE,
     SHARE_PRODUCER,
     GROUP_PREFIX,
@@ -150,6 +151,7 @@ constexpr OptionWrapper WARMUP_TOPIC_OPTION = {"warmup-topic", required_argument
 
 constexpr OptionWrapper START_BARRIER_DELAY_OPTION = {"start-barrier-delay", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::START_BARRIER_DELAY), "Start barrier delay (seconds)"};
 constexpr OptionWrapper MONITORING_BATCH_SIZE_OPTION = {"monitoring-batch-size", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::MONITORING_BATCH_SIZE), "Monitoring batch size"};
+constexpr OptionWrapper MONITORING_EPOCH_SIZE_OPTION = {"monitoring-epoch-size", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::MONITORING_EPOCH_SIZE), "Monitoring epoch size (ms)"};
 
 constexpr OptionWrapper SERVICE_RUNNER_POOL_SIZE_OPTION = {"service-runner-pool-size", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::SERVICE_RUNNER_POOL_SIZE), "Service runner pool size"};
 
