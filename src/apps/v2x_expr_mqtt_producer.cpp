@@ -94,7 +94,7 @@ namespace {
     vector<ServiceInfo> service_infos = {
         {"S50Hz", 1000.0/50.0, 6500},
         {"S30Hz", 1000.0/30.0, 400},
-        {"S10Hz-Info", 1000.0/10.0, 1600},
+        {"S10Hz-Info", 1000.0/10.0, 6500},
         {"S10Hz-Sensor", 1000.0/10.0, 1600},
     };
 
@@ -157,7 +157,7 @@ void V2xMqttExprProducerApp::init_clients() {
         for (const auto &service_info: service_infos) {
             services.push_back(make_service(
                 mosq_client, service_info.service_name,
-                args.topic_prefix + service_info.service_name + "/Car" + to_string(i), 
+                args.topic_prefix + service_info.service_name + "/Car" + to_string(i),
                 service_info.interval, service_info.msg_size
             ));
         }
@@ -194,7 +194,7 @@ shared_ptr<IService> V2xMqttExprProducerApp::make_service(mosquitto *mosq_client
 }
 
 shared_ptr<IService> V2xMqttExprProducerApp::make_warmup_service(mosquitto *mosq_client) {
-    shared_ptr<common::monitor::StatSumMonitorMessageGenerator> adaptor = 
+    shared_ptr<common::monitor::StatSumMonitorMessageGenerator> adaptor =
         make_shared<common::monitor::StatSumMonitorMessageGenerator>(10, 100);
     return make_shared<producer::MosqProducerService>(
         mosq_client,
