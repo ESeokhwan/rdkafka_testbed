@@ -272,7 +272,7 @@ void consume_run(struct ConsumerThreadArg *arg) {
     if (!consumer::subscribe_topics(consumer.get(), arg->topics)) return;
 
     while (!arg->end_flag->load(memory_order_acquire)) {
-        optional<string> plain_msg_opt = consumer::consume_message(consumer.get(), 1);
+        optional<string> plain_msg_opt = consumer::consume_message(consumer.get(), 0);
         if (!plain_msg_opt.has_value()) continue;
         if (arg->log_disabled) continue;
         arg->monitor_queue->enqueue(make_unique<monitor::StatSumMonitorLog>(
