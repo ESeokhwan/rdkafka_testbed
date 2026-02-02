@@ -6,8 +6,10 @@
 #include "util/time_util.h"
 #include "producer/mqtt_producer_service.h"
 
+#include <chrono>
 #include <csignal>
 #include <iostream>
+#include <latch>
 #include <memory>
 #include <getopt.h>
 #include <random>
@@ -63,6 +65,8 @@ private:
     vector<unique_ptr<ServicesRunner>> services_runners;
     vector<thread> client_threads;
     vector<mosquitto *> mosq_clients;
+
+    vector<shared_ptr<std::latch>> start_signals;
 
     random_device rd;
     mt19937 rng = mt19937(rd());
@@ -143,7 +147,16 @@ int main(int argc, char *argv[]) {
 void V2xMqttExprProducerApp::run() {
     init_clients();
 
+    double min_interval_ms = 1000.0;
+    for (const auto &service_info: service_infos) {
+        min_interval_ms = min(min_interval_ms, service_info.interval);
+    }
+    int interval_btw_clients_us = ((int) (min_interval_ms * 1000)) / args.client_cnt;
     start_barrier(args.start_barrier_delay);
+    for (auto cur_start_signal: start_signals) {
+        cur_start_signal->count_down();
+        std::this_thread::sleep_for(std::chrono::microseconds(interval_btw_clients_us));
+    }
     join_clients();
 }
 
@@ -163,8 +176,10 @@ void V2xMqttExprProducerApp::init_clients() {
         }
         auto warmup_service = make_warmup_service(mosq_client);
 
+        std::shared_ptr<std::latch> cur_start_signal = std::make_shared<std::latch>(std::latch(1));
+        start_signals.push_back(cur_start_signal);
         services_runners.push_back(make_unique<ServicesRunner>(
-            services, warmup_service, -1, 0, -1, rng, &start_signal, min(service_infos.size(), 4UL)
+            services, warmup_service, -1, 0, -1, rng, cur_start_signal.get(), min(service_infos.size(), 4UL)
         ));
     }
 
