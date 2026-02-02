@@ -147,15 +147,22 @@ int main(int argc, char *argv[]) {
 void V2xMqttExprProducerApp::run() {
     init_clients();
 
-    double min_interval_ms = 1000.0;
+    double max_interval_ms = 0.0;
     for (const auto &service_info: service_infos) {
-        min_interval_ms = min(min_interval_ms, service_info.interval);
+        max_interval_ms = max(max_interval_ms, service_info.interval);
     }
-    int interval_btw_clients_us = ((int) (min_interval_ms * 1000)) / args.client_cnt;
+    int interval_btw_clients_ms = max(5, ((int) max_interval_ms) / args.client_cnt);
+    int step_cnt = max_interval_ms / interval_btw_clients_ms;
+    int same_start_client_cnt = args.client_cnt / step_cnt;
     start_barrier(args.start_barrier_delay);
-    for (auto cur_start_signal: start_signals) {
-        cur_start_signal->count_down();
-        std::this_thread::sleep_for(std::chrono::microseconds(interval_btw_clients_us));
+    for (int i = 0; i < step_cnt; i++) {
+        for (int j = 0; j < same_start_client_cnt; j++) {
+            int cur_idx = i * same_start_client_cnt + j;
+            if (cur_idx >= args.client_cnt) break;
+            auto cur_start_signal = start_signals.at(cur_idx);
+            cur_start_signal->count_down();
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(interval_btw_clients_ms));
     }
     join_clients();
 }
