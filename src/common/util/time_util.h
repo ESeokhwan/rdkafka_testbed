@@ -7,7 +7,7 @@ namespace util {
 
 int64_t get_current_timestamp();
 
-int64_t get_current_timestamp_nano();
+int64_t get_current_nano_tick();
 
 std::string current_time_str();
 

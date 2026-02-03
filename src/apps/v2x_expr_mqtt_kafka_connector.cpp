@@ -94,8 +94,8 @@ int main(int argc, char *argv[]) {
         }).detach();
     }
 
-    auto end_time = chrono::steady_clock::now() + chrono::seconds(args.running_time);
-    while (chrono::steady_clock::now() < end_time) {
+    auto end_tick = chrono::steady_clock::now() + chrono::seconds(args.running_time);
+    while (chrono::steady_clock::now() < end_tick) {
         if (g_signal_received.load()) {
             break;
         }

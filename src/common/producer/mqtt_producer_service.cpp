@@ -12,12 +12,12 @@ namespace {
     bool mosq_flush(mosquitto *mosq_client, int timeout_ms) {
         if (!mosq_client) return false;
 
-        int64_t start_time_ns = common::util::get_current_timestamp_nano();
+        int64_t start_tick_ns = common::util::get_current_nano_tick();
         int64_t timeout_ns = timeout_ms * 1000 * 1000;
 
         while (mosquitto_want_write(mosq_client)) {
-            int64_t current_time_ns = common::util::get_current_timestamp_nano();
-            if ((current_time_ns - start_time_ns) > timeout_ns) return false;
+            int64_t current_tick_ns = common::util::get_current_nano_tick();
+            if ((current_tick_ns - start_tick_ns) > timeout_ns) return false;
 
             mosquitto_loop(mosq_client, 0, 1);
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -96,7 +96,7 @@ void MosqProducerService::work() {
         writer->notify_if_needed();
     }
     int rc = mosquitto_publish(this->mosq_client, nullptr,
-        topic_name.c_str(), msg.size(), msg.c_str(), 0, false);
+        topic_name.c_str(), msg.size(), msg.c_str(), 1, false);
     if (rc != MOSQ_ERR_SUCCESS) {
         throw std::runtime_error("Publish failed for " + topic_name + ": " + mosquitto_strerror(rc));
     }

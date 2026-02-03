@@ -4,15 +4,15 @@
 
 namespace {
 
-std::chrono::steady_clock::time_point calc_next_time(
-    std::chrono::steady_clock::time_point cur_time, double interval
+std::chrono::steady_clock::time_point calc_next_tick(
+    std::chrono::steady_clock::time_point cur_tick, double interval
 ) {
     auto duration = std::chrono::duration<double, std::milli>(interval);
-    return (cur_time + std::chrono::duration_cast<std::chrono::steady_clock::duration>(duration));
+    return (cur_tick + std::chrono::duration_cast<std::chrono::steady_clock::duration>(duration));
 }
 
-std::chrono::steady_clock::time_point calc_next_time(double interval) {
-    return calc_next_time(std::chrono::steady_clock::now(), interval);
+std::chrono::steady_clock::time_point calc_next_tick(double interval) {
+    return calc_next_tick(std::chrono::steady_clock::now(), interval);
 }
 
 }
@@ -92,7 +92,7 @@ void ServicesRunner::init_first_schedules() {
     std::lock_guard<std::mutex> lock(queue_mutex);
     auto cur_time = std::chrono::steady_clock::now();
     for (auto& svc : services) {
-        auto next = calc_next_time(cur_time, svc->cur_interval());
+        auto next = calc_next_tick(cur_time, svc->cur_interval());
         schedule_queue.push({next, svc});
         if (interval != -1) break;
     }
@@ -122,11 +122,11 @@ void ServicesRunner::process_task(ScheduleEntry entry) {
     {
         std::lock_guard<std::mutex> lock(queue_mutex);
         if (has_more) {
-            auto next_time = calc_next_time(entry.service->cur_interval());
+            auto next_time = calc_next_tick(entry.service->cur_interval());
             schedule_queue.push({next_time, entry.service});
         } else if (interval != -1 && current_service_idx < services.size() - 1) {
             int noise = noises.next();
-            auto next_time = calc_next_time(interval + noise);
+            auto next_time = calc_next_tick(interval + noise);
             current_service_idx += 1;
             schedule_queue.push({next_time, services[current_service_idx]});
         }
