@@ -66,6 +66,7 @@ struct ConsumerThreadArg {
 
 struct ServiceArg {
     string name;
+    string topic;
     double threshold;
 };
 
@@ -142,10 +143,10 @@ int main(int argc, char *argv[]) {
     }
 
     vector<struct ServiceArg> service_args = {
-        {"0Sensor_information_sharing", 100},
-        {"1Information_sharing_for_automated_driving", 100},
-        {"2Cooperative_driving_for_vehicle_platooning_lowest", 25},
-        {"3Cooperative_driving_for_vehicle_platooning_lower", 20},
+        {"0Sensor_information_sharing", "Sensor_Sharing", 100},
+        {"1Information_sharing_for_automated_driving", "Information_Sharing", 100},
+        {"2Cooperative_driving_for_vehicle_platooning_lowest", "Platooning_Lowest", 25},
+        {"3Cooperative_driving_for_vehicle_platooning_lower", "Platooning_Lower", 20},
     };
 
     shared_ptr<moniq::MonitorQueue> monitor_queue = make_shared<moniq::MonitorQueue>();
@@ -183,7 +184,7 @@ void V2xExprConsumerApp::init_clients() {
         consumer_thread_args[i].broker = args.broker;
         consumer_thread_args[i].group_id = args.group_prefix + to_string(cur_idx);
         consumer_thread_args[i].client_id = args.topic_prefix + service_args[assigned_idx[i]].name.substr(1) + "_" + to_string(cur_idx);
-        consumer_thread_args[i].topics.push_back(args.topic_prefix + service_args[assigned_idx[i]].name.substr(1));
+        consumer_thread_args[i].topics.push_back(args.topic_prefix + service_args[assigned_idx[i]].topic);
         consumer_thread_args[i].start_signal = &start_signal;
         consumer_thread_args[i].end_flag = &end_flag;
         consumer_thread_args[i].verbose = args.verbose;
