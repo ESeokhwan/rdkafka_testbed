@@ -148,6 +148,7 @@ void V2xMqttExprProducerApp::run() {
 }
 
 void V2xMqttExprProducerApp::init_clients() {
+    mosquitto_lib_init();
     for (int i = args.start_idx; i < args.start_idx + args.client_cnt; i++) {
         vector<shared_ptr<IService>> services;
         mosquitto *mosq_client = producer::MosqProducerService::create_mosq_client(
