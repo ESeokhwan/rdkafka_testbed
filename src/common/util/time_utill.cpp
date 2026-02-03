@@ -13,7 +13,7 @@ int64_t get_current_timestamp() {
     return ms.count();
 }
 
-int64_t get_current_timestamp_nano() {
+int64_t get_current_nano_tick() {
     auto now = std::chrono::steady_clock::now();
     auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch());
     return ns.count();
