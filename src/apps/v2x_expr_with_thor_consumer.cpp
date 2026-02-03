@@ -142,10 +142,10 @@ int main(int argc, char *argv[]) {
     }
 
     vector<struct ServiceArg> service_args = {
-        {"0Sensor_Sharing", 100},
-        {"1Information_Sharing", 100},
-        {"2Platooning_Lowest", 25},
-        {"3Platooning_Lower", 20},
+        {"0Sensor_information_sharing", 100},
+        {"1Information_sharing_for_automated_driving", 100},
+        {"2Cooperative_driving_for_vehicle_platooning_lowest", 25},
+        {"3Cooperative_driving_for_vehicle_platooning_lower", 20},
     };
 
     shared_ptr<moniq::MonitorQueue> monitor_queue = make_shared<moniq::MonitorQueue>();
