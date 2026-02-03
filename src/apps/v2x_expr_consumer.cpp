@@ -151,7 +151,7 @@ int main(int argc, char *argv[]) {
     shared_ptr<moniq::MonitorQueue> monitor_queue = make_shared<moniq::MonitorQueue>();
     shared_ptr<moniq::writer::IMonitorLogWriteStrategy> write_strategy =
         make_shared<monitor::StatSumPerSecMonitorLogWriteStrategy>(generate_services(service_args, args.outdir, args.out_prefix), args.monitoring_epoch_size);
-    shared_ptr<moniq::writer::MonitorLogWriter> writer = make_shared<moniq::writer::MonitorLogWriter>(monitor_queue, write_strategy, -1, -1);
+    shared_ptr<moniq::writer::MonitorLogWriter> writer = make_shared<moniq::writer::MonitorLogWriter>(monitor_queue, write_strategy, -1, -1, 32);
     shared_ptr<common::monitor::IStatSumMonitorMessageAdaptor> message_adaptor = make_shared<common::monitor::ExtractOnlyStatSumMonitorMessageAdaptor>();
 
     app = new V2xExprConsumerApp(monitor_queue, writer, message_adaptor, args, service_args);
@@ -261,9 +261,12 @@ void consume_run(struct ConsumerThreadArg *arg) {
     conf->set("auto.offset.reset", "latest", errstr);
     conf->set("fetch.min.bytes", "1", errstr);
     conf->set("log_level", "0", errstr);
+    conf->set("enable.auto.commit", "false", errstr);
     if (arg->verbose) {
         conf->set("log_level", "7", errstr);
     }
+    if (errstr.size() > 0) cout << "Error on creating consumer config: " << errstr << endl;
+
     unique_ptr<RdKafka::KafkaConsumer> consumer = consumer::create_consumer(conf.get());
     if (consumer.get() == nullptr) return;
 

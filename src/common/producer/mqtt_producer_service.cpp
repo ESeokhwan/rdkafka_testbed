@@ -96,7 +96,7 @@ void MosqProducerService::work() {
         writer->notify_if_needed();
     }
     int rc = mosquitto_publish(this->mosq_client, nullptr,
-        topic_name.c_str(), msg.size(), msg.c_str(), 0, false);
+        topic_name.c_str(), msg.size(), msg.c_str(), 1, false);
     if (rc != MOSQ_ERR_SUCCESS) {
         throw std::runtime_error("Publish failed for " + topic_name + ": " + mosquitto_strerror(rc));
     }
