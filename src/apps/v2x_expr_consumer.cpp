@@ -197,9 +197,9 @@ void V2xExprConsumerApp::init_clients() {
 }
 
 void V2xExprConsumerApp::wait_for_running_time() {
-    auto end_time = chrono::steady_clock::now() + chrono::seconds(args.running_time);
+    auto end_tick = chrono::steady_clock::now() + chrono::seconds(args.running_time);
 
-    while (chrono::steady_clock::now() < end_time) {
+    while (chrono::steady_clock::now() < end_tick) {
         if (g_signal_received.load()) {
             break;
         }

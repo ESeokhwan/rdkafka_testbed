@@ -95,7 +95,7 @@ void ProducerService::work() {
 
     std::string msg = this->adaptor->generate(core_msg);
     if (log_enabled) {
-        double requested_at = double(util::get_current_timestamp_nano()) / (1000.0 * 1000.0);
+        double requested_at = double(util::get_current_nano_tick()) / (1000.0 * 1000.0);
         monitor_queue->enqueue(std::make_unique<moniq::MonitorLog>(
             core_msg, "REQUEST", requested_at));
         writer->notify_if_needed();
@@ -117,7 +117,7 @@ void ProducerService::close() {
 }
 
 void LoggingDeliveryReportCb::dr_cb(RdKafka::Message &message) {
-    double responded_at = double(common::util::get_current_timestamp_nano()) / (1000.0 * 1000.0);
+    double responded_at = double(common::util::get_current_nano_tick()) / (1000.0 * 1000.0);
     if (message.err() == RdKafka::ERR_NO_ERROR) {
         std::string message_plain_str = message.payload() ? 
             std::string(static_cast<const char*>(message.payload()), message.len()) : "";
