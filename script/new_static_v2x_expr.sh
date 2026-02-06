@@ -451,7 +451,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
         --exec-path $MEASURE_CONSUMER_EXEC -- \
             --broker $KAFKA_BROKER --group-prefix r_group_ \
             --client-cnt -1 --running-time $INF_DURATION \
-            --outdir $MEASURE_CONSUMER_OUT --out-prefix \"${CURRENT_CAR_NUM}C_\" \
+            --outdir $MEASURE_CONSUMER_OUT --out-prefix \"${CURRENT_CAR_NUM}C_${TIMESTAMP}\" \
             --monitoring-epoch-size $MONITORING_EPOCH_SIZE $VERBOSE_TAG"
     if [ -z "$MEASURE_CONSUMER_HOST" ]; then
         eval $MEASURE_CONSUMER_COMMAND
