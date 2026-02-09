@@ -6,6 +6,7 @@
 #include "util/time_util.h"
 #include "producer/mqtt_producer_service.h"
 
+#include <chrono>
 #include <csignal>
 #include <iostream>
 #include <memory>
@@ -41,6 +42,9 @@ struct Arguments {
     string warmup_topic;
 
     int start_barrier_delay;
+    int client_spread_time;
+    int client_spread_interval;
+
     int monitoring_batch_size;
 
     bool scrapable;
@@ -63,6 +67,7 @@ private:
     vector<unique_ptr<ServicesRunner>> services_runners;
     vector<thread> client_threads;
     vector<mosquitto *> mosq_clients;
+    vector<shared_ptr<std::latch>> start_signals;
 
     random_device rd;
     mt19937 rng = mt19937(rd());
@@ -143,7 +148,19 @@ int main(int argc, char *argv[]) {
 void V2xMqttExprProducerApp::run() {
     init_clients();
 
+    int possible_spread_step_cnt = args.client_spread_time / args.client_spread_interval;
+    int client_cnt_per_spread_step = (int) std::ceil((double) args.client_cnt / (double) possible_spread_step_cnt);
     start_barrier(args.start_barrier_delay);
+    for (int i = 0; i < possible_spread_step_cnt; i++) {
+        for (int j = 0; j < client_cnt_per_spread_step; j++) {
+            int cur_idx = i * client_cnt_per_spread_step + j;
+            if (cur_idx >= args.client_cnt) break;
+            auto cur_start_signal = start_signals.at(cur_idx);
+            cur_start_signal->count_down();
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(args.client_spread_interval));
+    }
+
     join_clients();
 }
 
@@ -164,8 +181,10 @@ void V2xMqttExprProducerApp::init_clients() {
         }
         auto warmup_service = make_warmup_service(mosq_client);
 
+        std::shared_ptr<std::latch> cur_start_signal = std::make_shared<std::latch>(1);
+        start_signals.push_back(cur_start_signal);
         services_runners.push_back(make_unique<ServicesRunner>(
-            services, warmup_service, -1, 0, -1, rng, &start_signal, min(service_infos.size(), 4UL)
+            services, warmup_service, -1, 0, -1, rng, cur_start_signal.get(), min(service_infos.size(), 4UL)
         ));
     }
 
@@ -256,6 +275,8 @@ Arguments parse_arguments(int argc, char** argv) {
     args.warmup_cnt = 0;
     args.warmup_topic = "test_warmup";
     args.start_barrier_delay = 2;
+    args.client_spread_time = 100;
+    args.client_spread_interval = 5;
     args.monitoring_batch_size = -1;
     args.scrapable = false;
     args.verbose = false;
@@ -272,6 +293,8 @@ Arguments parse_arguments(int argc, char** argv) {
         util::WARMUP_CNT_OPTION,
         util::WARMUP_TOPIC_OPTION,
         util::START_BARRIER_DELAY_OPTION,
+        util::CLIENT_SPREAD_TIME_OPTION,
+        util::CLIENT_SPREAD_INTERVAL_OPTION,
         util::MONITORING_BATCH_SIZE_OPTION,
         util::SCRAPABLE_OPTION,
         util::VERBOSE_OPTION,
@@ -292,6 +315,8 @@ Arguments parse_arguments(int argc, char** argv) {
             case util::WARMUP_CNT_OPTION.get_val(): args.warmup_cnt = atoi(optarg); break;
             case util::WARMUP_TOPIC_OPTION.get_val(): args.warmup_topic = optarg; break;
             case util::START_BARRIER_DELAY_OPTION.get_val(): args.start_barrier_delay = atoi(optarg); break;
+            case util::CLIENT_SPREAD_TIME_OPTION.get_val(): args.client_spread_time = atoi(optarg); break;
+            case util::CLIENT_SPREAD_INTERVAL_OPTION.get_val(): args.client_spread_interval = atoi(optarg); break;
             case util::MONITORING_BATCH_SIZE_OPTION.get_val(): args.monitoring_batch_size = atoi(optarg); break;
             case util::SCRAPABLE_OPTION.get_val(): args.scrapable = true; break;
             case util::VERBOSE_OPTION.get_val(): args.verbose = true; break;
