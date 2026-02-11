@@ -12,16 +12,16 @@ namespace monitor {
 
 std::ostream& print_latency_log(std::ostream &ostream, const ProcessedLog &log);
 std::ostream& print_stat_log(std::ostream &ostream, const Statistics &log);
-Statistics calc_statistics(const std::vector<ProcessedLog> &logs, double threshold, double epoch_size_ms);
-double calc_epoch_size(const std::vector<ProcessedLog> &logs);
-double calc_reliability(const std::vector<ProcessedLog> &logs, double threshold);
+Statistics calc_statistics(const std::vector<ProcessedLog> &logs, int64_t threshold, int64_t epoch_size_ms);
+int64_t calc_epoch_size(const std::vector<ProcessedLog> &logs);
+double calc_reliability(const std::vector<ProcessedLog> &logs, int64_t threshold);
 double calc_avg_latency(const std::vector<ProcessedLog> &logs);
-double calc_latency_percentile(const std::vector<double> &sorted_latencies, double percentile);
-std::vector<double> make_sorted_latencies(const std::vector<ProcessedLog> &logs);
-std::map<double, std::vector<ProcessedLog>> devide_logs_by_epoch(const std::vector<ProcessedLog> &logs, double epoch_size_ms);
+int64_t calc_latency_percentile(const std::vector<int64_t> &sorted_latencies, double percentile);
+std::vector<int64_t> make_sorted_latencies(const std::vector<ProcessedLog> &logs);
+std::map<double, std::vector<ProcessedLog>> devide_logs_by_epoch(const std::vector<ProcessedLog> &logs, int64_t epoch_size_ms);
 
 
-StatSumPerSecMonitorLogWriteStrategy::StatSumPerSecMonitorLogWriteStrategy(std::vector<ServiceInfo> services, double epoch_size_ms)
+StatSumPerSecMonitorLogWriteStrategy::StatSumPerSecMonitorLogWriteStrategy(std::vector<ServiceInfo> services, int64_t epoch_size_ms)
     : epoch_size_ms_(epoch_size_ms) {
     for (auto service: services) {
         services_.insert({service.name, service});
@@ -46,7 +46,7 @@ void StatSumPerSecMonitorLogWriteStrategy::write(std::unique_ptr<moniq::IMonitor
 bool StatSumPerSecMonitorLogWriteStrategy::commit() {
     for (const auto& [service_name, processed_logs]: processed_logs_map_) {
         ServiceInfo service = services_[service_name];
-        Statistics stat = calc_statistics(processed_logs, service.threshold, -1.0);
+        Statistics stat = calc_statistics(processed_logs, service.threshold, -1);
 
         *service.latency_ostream << "Content,Status,RequestedAt,respondedAt,Latency\n";
         for (const auto& log: processed_logs) {
@@ -85,21 +85,21 @@ std::ostream& print_stat_log(std::ostream &ostream, const Statistics &log) {
 }
 
 // Statistics calculating functions.
-Statistics calc_statistics(const std::vector<ProcessedLog> &logs, double threshold, double epoch_size_ms) {
-    double calced_epoch_size = epoch_size_ms < 0 ? calc_epoch_size(logs) : epoch_size_ms;
+Statistics calc_statistics(const std::vector<ProcessedLog> &logs, int64_t threshold, int64_t epoch_size_ms) {
+    int64_t calced_epoch_size = epoch_size_ms < 0 ? calc_epoch_size(logs) : epoch_size_ms;
     double reliability = calc_reliability(logs, threshold);
     double avg_latency = calc_avg_latency(logs);
 
-    std::vector<double> sorted_latencies = make_sorted_latencies(logs);
-    double p90 = calc_latency_percentile(sorted_latencies, 0.90);
-    double p99 = calc_latency_percentile(sorted_latencies, 0.99);
+    std::vector<int64_t> sorted_latencies = make_sorted_latencies(logs);
+    int64_t p90 = calc_latency_percentile(sorted_latencies, 0.90);
+    int64_t p99 = calc_latency_percentile(sorted_latencies, 0.99);
     return {logs.size(), calced_epoch_size, reliability, avg_latency, p90, p99};
 }
 
-double calc_epoch_size(const std::vector<ProcessedLog> &logs) {
+int64_t calc_epoch_size(const std::vector<ProcessedLog> &logs) {
     if (logs.size() == 0) return 0.0;
-    double min_requested_at = logs[0].requested_at;
-    double max_responded_at = logs[0].responded_at;
+    int64_t min_requested_at = logs[0].requested_at;
+    int64_t max_responded_at = logs[0].responded_at;
     for (auto log: logs) {
         if (log.requested_at < min_requested_at) min_requested_at = log.requested_at;
         if (log.responded_at > max_responded_at) max_responded_at = log.responded_at;
@@ -107,7 +107,7 @@ double calc_epoch_size(const std::vector<ProcessedLog> &logs) {
     return max_responded_at - min_requested_at;
 }
 
-double calc_reliability(const std::vector<ProcessedLog> &logs, double threshold) {
+double calc_reliability(const std::vector<ProcessedLog> &logs, int64_t threshold) {
     int record_cnt = logs.size();
     int success_record_cnt = 0;
 
@@ -125,14 +125,14 @@ double calc_avg_latency(const std::vector<ProcessedLog> &logs) {
     return (logs.size() > 0) ? (avg_latency / double(logs.size())): 0.0;
 }
 
-double calc_latency_percentile(const std::vector<double> &sorted_latencies, double percentile) {
+int64_t calc_latency_percentile(const std::vector<int64_t> &sorted_latencies, double percentile) {
     size_t idx = size_t(sorted_latencies.size() * percentile);
     if (idx < sorted_latencies.size()) return sorted_latencies[idx];
-    return 0.0;
+    return 0;
 }
 
-std::vector<double> make_sorted_latencies(const std::vector<ProcessedLog> &logs) {
-    std::vector<double> latencies;
+std::vector<int64_t> make_sorted_latencies(const std::vector<ProcessedLog> &logs) {
+    std::vector<int64_t> latencies;
     for (auto log: logs) {
         latencies.push_back(log.latency);
     }
@@ -140,7 +140,7 @@ std::vector<double> make_sorted_latencies(const std::vector<ProcessedLog> &logs)
     return latencies;
 }
 
-std::map<double, std::vector<ProcessedLog>> devide_logs_by_epoch(const std::vector<ProcessedLog> &logs, double epoch_size_ms) {
+std::map<double, std::vector<ProcessedLog>> devide_logs_by_epoch(const std::vector<ProcessedLog> &logs, int64_t epoch_size_ms) {
     std::map<double, std::vector<ProcessedLog>> result;
     for (auto log: logs) {
         int64_t cur_epoch = int64_t(log.responded_at / epoch_size_ms);

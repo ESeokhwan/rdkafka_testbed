@@ -67,7 +67,7 @@ struct ConsumerThreadArg {
 struct ServiceArg {
     string name;
     string topic;
-    double threshold;
+    int64_t threshold;
 };
 
 class V2xExprConsumerApp: public AbstractApplication {

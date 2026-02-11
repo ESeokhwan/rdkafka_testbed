@@ -13,7 +13,7 @@ private:
     std::optional<std::string> extracted_service_;
 
 public:
-    StatSumMonitorLog(common::monitor::IStatSumMonitorMessageAdaptor *message_adaptor, const std::string& raw_data, const std::string& status, double responded_at);
+    StatSumMonitorLog(common::monitor::IStatSumMonitorMessageAdaptor *message_adaptor, const std::string& raw_data, const std::string& status, int64_t responded_at);
     ~StatSumMonitorLog() = default;
 
     std::vector<std::string> get_headers() const override;
@@ -21,7 +21,7 @@ public:
     void preprocess() override;
 
     virtual std::string get_service() const;
-    double get_latency() const override;
+    int64_t get_latency() const override;
 };
 
 }
