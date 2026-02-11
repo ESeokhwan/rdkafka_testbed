@@ -13,11 +13,11 @@ std::string ExtractOnlyStatSumMonitorMessageAdaptor::generate_with_root_adaptor(
     return root_adaptor.generate(message_id);
 }
 
-std::string ExtractOnlyStatSumMonitorMessageAdaptor::generate_with_root_adaptor(std::string message_id, double requested_at) {
+std::string ExtractOnlyStatSumMonitorMessageAdaptor::generate_with_root_adaptor(std::string message_id, int64_t requested_at) {
     return root_adaptor.generate(message_id, requested_at);
 }
 
-std::string ExtractOnlyStatSumMonitorMessageAdaptor::generate_with_root_adaptor(std::string message_id, double requested_at, std::string service_name) {
+std::string ExtractOnlyStatSumMonitorMessageAdaptor::generate_with_root_adaptor(std::string message_id, int64_t requested_at, std::string service_name) {
     return root_adaptor.generate(message_id, requested_at, { { SERVICE_KEY, service_name } });
 }
 
@@ -25,7 +25,7 @@ std::string ExtractOnlyStatSumMonitorMessageAdaptor::extract_content_with_root_a
     return root_adaptor.extract_content(message);
 }
 
-double ExtractOnlyStatSumMonitorMessageAdaptor::extract_requested_at_with_root_adaptor(const std::string& message) const {
+int64_t ExtractOnlyStatSumMonitorMessageAdaptor::extract_requested_at_with_root_adaptor(const std::string& message) const {
     return root_adaptor.extract_requested_at(message);
 }
 
@@ -37,11 +37,11 @@ std::string StatSumMonitorMessageGenerator::generate_with_root_adaptor(std::stri
     return root_adaptor.generate(message_id);
 }
 
-std::string StatSumMonitorMessageGenerator::generate_with_root_adaptor(std::string message_id, double requested_at) {
+std::string StatSumMonitorMessageGenerator::generate_with_root_adaptor(std::string message_id, int64_t requested_at) {
     return root_adaptor.generate(message_id, requested_at);
 }
 
-std::string StatSumMonitorMessageGenerator::generate_with_root_adaptor(std::string message_id, double requested_at, std::string service_name) {
+std::string StatSumMonitorMessageGenerator::generate_with_root_adaptor(std::string message_id, int64_t requested_at, std::string service_name) {
     return root_adaptor.generate(message_id, requested_at, { { SERVICE_KEY, service_name } });
 }
 
@@ -49,7 +49,7 @@ std::string StatSumMonitorMessageGenerator::extract_content_with_root_adaptor(co
     return root_adaptor.extract_content(message);
 }
 
-double StatSumMonitorMessageGenerator::extract_requested_at_with_root_adaptor(const std::string& message) const {
+int64_t StatSumMonitorMessageGenerator::extract_requested_at_with_root_adaptor(const std::string& message) const {
     return root_adaptor.extract_requested_at(message);
 }
 

@@ -88,7 +88,7 @@ void MosqProducerService::work() {
     std::string core_msg = topic_name + "_" + std::to_string(idx);
     if (msg_tagged && log_enabled) core_msg = "R" + core_msg;
 
-    double requested_at = double(util::get_current_timestamp());
+    int64_t requested_at = util::get_current_timestamp();
     std::string msg = this->adaptor->generate(core_msg, requested_at, service_name);
     if (log_enabled) {
         monitor_queue->enqueue(std::make_unique<moniq::MonitorLog>(

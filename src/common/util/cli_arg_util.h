@@ -42,7 +42,9 @@ enum class LongOnlyOptionVals {
     TOPIC_PREFIX,
     OUT_PREFIX,
     KAFKA_BROKER,
-    MQTT_BROKER
+    MQTT_BROKER,
+    CLIENT_SPREAD_TIME,
+    CLIENT_SPREAD_INTERVAL
 };
 
 }
@@ -135,6 +137,9 @@ constexpr OptionWrapper INTERVAL_NOISE_STDDEV_OPTION = {"interval-noise-stddev",
 constexpr OptionWrapper INTERVAL_NOISE_STDDEV_RATE_OPTION = {"interval-noise-stddev-rate", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::INTERVAL_NOISE_STDDEV_RATE), "Interval noise standard deviation rate (0~100)"};
 constexpr OptionWrapper INTERVAL_BTW_TOPIC_OPTION = {"interval-btw-topic", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::INTERVAL_BTW_TOPIC), "Interval between topics"};
 constexpr OptionWrapper INTERVAL_BTW_TOPIC_NOISE_STDDEV_OPTION = {"interval-btw-topic-noise-stddev", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::INTERVAL_BTW_TOPIC_NOISE_STDDEV), "Interval between topics noise standard deviation"};
+
+constexpr OptionWrapper CLIENT_SPREAD_TIME_OPTION = {"client-spread-time", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::CLIENT_SPREAD_TIME), "Total starting time for spreading (ms)"};
+constexpr OptionWrapper CLIENT_SPREAD_INTERVAL_OPTION = {"client-spread-interval", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::CLIENT_SPREAD_INTERVAL), "Starting time interval between clients for spreading (ms)"};
 
 constexpr OptionWrapper FOR_CREATION_OPTION = {"for-creation", no_argument, nullptr, static_cast<int>(LongOnlyOptionVals::FOR_CREATION), "Enable creation mode"};
 constexpr OptionWrapper NEED_FLUSH_OPTION = {"need-flush", no_argument, nullptr, static_cast<int>(LongOnlyOptionVals::NEED_FLUSH), "Enable flush after producing messages"};
