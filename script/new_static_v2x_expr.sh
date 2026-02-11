@@ -62,7 +62,7 @@ TEMP=$(getopt -o d:vh --longoptions \
     load-consumer-exec:, measure-consumer-host:, measure-consumer-root:, measure-consumer-out:,\
     measure-consumer-temp:, measure-consumer-exec:, producer-host:, producer-root:, producer-out:, \
     producer-temp:, producer-exec:, duration:, num-car:, interval-noise-rate:, \
-    client_spread_start_time_ms:, client_spread_interval_ms:, onitoring-epoch-size:, terminate-timeout:" \
+    client-spread-start-time-ms:, client-spread-interval-ms:, monitoring-epoch-size:, terminate-timeout:" \
     -n 'myscript' -- "$@" \
 )
 
@@ -133,8 +133,8 @@ while true ; do
         -d|--duration) CL_DURATION="$2" ; shift 2 ;;
         --num-car) IFS=',' read -r -a CL_NUM_CAR <<< "$2" ; shift 2 ;;
         --interval-noise-rate) CL_INTERVAL_NOISE_RATE="$2" ; shift 2 ;;
-        --client_spread_start_time_ms) CL_CLIENT_SPREAD_START_TIME_MS="$2" ; shift 2 ;;
-        --client_spread_interval_ms) CL_CLIENT_SPREAD_INTERVAL_MS="$2" ; shift 2 ;;
+        --client-spread-start-time-ms) CL_CLIENT_SPREAD_START_TIME_MS="$2" ; shift 2 ;;
+        --client-spread-interval-ms) CL_CLIENT_SPREAD_INTERVAL_MS="$2" ; shift 2 ;;
         --monitoring-epoch-size) CL_MONITORING_EPOCH_SIZE="$2" ; shift 2 ;;
         -v|--verbose) CL_VERBOSE=1 ; shift ;;
         -h|--help) HELP=1 ; shift ;;
@@ -178,8 +178,8 @@ if [ "$HELP" -eq 1 ]; then
     echo "  -d, --duration <seconds>                 Duration for the test run. (Default: 100)"
     echo "      --num-car <num1,num2,...>            Comma-separated list of car counts for the test. (Default: (10))"
     echo "      --interval-noise-rate <f>            Standard deviation of noise to add to produce interval (Default: 0.0)"
-    echo "      --client_spread_start_time_ms <ms>   Total start time in milliseconds to spread client startups. (Default: 100)"
-    echo "      --client_spread_interval_ms <ms>     Interval in milliseconds between each client startup. (Default: 5)"
+    echo "      --client-spread-start-time-ms <ms>   Total start time in milliseconds to spread client startups. (Default: 100)"
+    echo "      --client-spread-interval-ms <ms>     Interval in milliseconds between each client startup. (Default: 5)"
     echo "      --monitoring-epoch-size <f>          Epoch size in milli seconds of calculating throughput, reliability, and more. (Default: 1000.0)"
     echo "  -v, --verbose                            Enable verbose output. (Config key: VERBOSE=1)"
     echo "  -h, --help                               Display this help message and exit."
