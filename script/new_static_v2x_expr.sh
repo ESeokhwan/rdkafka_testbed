@@ -45,7 +45,7 @@ DURATION=100
 NUM_CAR=(10)
 
 INTERVAL_NOISE_RATE=0.0
-CLIENT_SPREAD_START_TIME=100
+CLIENT_SPREAD_TIME=100
 CLIENT_SPREAD_INTERVAL=5
 
 MONITORING_EPOCH_SIZE=1000.0
@@ -62,7 +62,7 @@ TEMP=$(getopt -o d:vh --longoptions \
     load-consumer-exec:, measure-consumer-host:, measure-consumer-root:, measure-consumer-out:,\
     measure-consumer-temp:, measure-consumer-exec:, producer-host:, producer-root:, producer-out:, \
     producer-temp:, producer-exec:, duration:, num-car:, interval-noise-rate:, \
-    client-spread-start-time:, client-spread-interval:, monitoring-epoch-size:, terminate-timeout:" \
+    client-spread-time:, client-spread-interval:, monitoring-epoch-size:, terminate-timeout:" \
     -n 'myscript' -- "$@" \
 )
 
@@ -97,7 +97,7 @@ CL_TERMINATE_TIMEOUT=""
 CL_DURATION=""
 CL_NUM_CAR=()
 CL_INTERVAL_NOISE_RATE=""
-CL_CLIENT_SPREAD_START_TIME=""
+CL_CLIENT_SPREAD_TIME=""
 CL_CLIENT_SPREAD_INTERVAL=""
 CL_MONITORING_EPOCH_SIZE=""
 CL_VERBOSE=""
@@ -133,7 +133,7 @@ while true ; do
         -d|--duration) CL_DURATION="$2" ; shift 2 ;;
         --num-car) IFS=',' read -r -a CL_NUM_CAR <<< "$2" ; shift 2 ;;
         --interval-noise-rate) CL_INTERVAL_NOISE_RATE="$2" ; shift 2 ;;
-        --client-spread-start-time) CL_CLIENT_SPREAD_START_TIME="$2" ; shift 2 ;;
+        --client-spread-time) CL_CLIENT_SPREAD_TIME="$2" ; shift 2 ;;
         --client-spread-interval) CL_CLIENT_SPREAD_INTERVAL="$2" ; shift 2 ;;
         --monitoring-epoch-size) CL_MONITORING_EPOCH_SIZE="$2" ; shift 2 ;;
         -v|--verbose) CL_VERBOSE=1 ; shift ;;
@@ -178,7 +178,7 @@ if [ "$HELP" -eq 1 ]; then
     echo "  -d, --duration <seconds>                 Duration for the test run. (Default: 100)"
     echo "      --num-car <num1,num2,...>            Comma-separated list of car counts for the test. (Default: (10))"
     echo "      --interval-noise-rate <f>            Standard deviation of noise to add to produce interval (Default: 0.0)"
-    echo "      --client-spread-start-time <ms>      Total start time in milliseconds to spread client startups. (Default: 100)"
+    echo "      --client-spread-time <ms>            Time in milliseconds to spread client startups. (Default: 100)"
     echo "      --client-spread-interval <ms>        Interval in milliseconds between each client startup. (Default: 5)"
     echo "      --monitoring-epoch-size <f>          Epoch size in milli seconds of calculating throughput, reliability, and more. (Default: 1000.0)"
     echo "  -v, --verbose                            Enable verbose output. (Config key: VERBOSE=1)"
@@ -286,8 +286,8 @@ fi
 if [ -n "$CL_INTERVAL_NOISE_RATE" ]; then
     INTERVAL_NOISE_RATE="$CL_INTERVAL_NOISE_RATE"
 fi
-if [ -n "$CL_CLIENT_SPREAD_START_TIME" ]; then
-    CLIENT_SPREAD_START_TIME="$CL_CLIENT_SPREAD_START_TIME"
+if [ -n "$CL_CLIENT_SPREAD_TIME" ]; then
+    CLIENT_SPREAD_TIME="$CL_CLIENT_SPREAD_TIME"
 fi
 if [ -n "$CL_CLIENT_SPREAD_INTERVAL" ]; then
     CLIENT_SPREAD_INTERVAL="$CL_CLIENT_SPREAD_INTERVAL"
@@ -367,7 +367,7 @@ if [ "$VERBOSE" -eq 1 ]; then
     echo "Duration:               $DURATION"
     echo "Num Car:                $NUM_CAR"
     echo "Interval Noise Rate:    $INTERVAL_NOISE_RATE"
-    echo "Client Spread Start Time (ms): $CLIENT_SPREAD_START_TIME"
+    echo "Client Spread Start Time (ms): $CLIENT_SPREAD_TIME"
     echo "Client Spread Interval (ms):   $CLIENT_SPREAD_INTERVAL"
     echo "Monitoring Epoch Size:  $MONITORING_EPOCH_SIZE"
     echo "Verbose Mode:           $VERBOSE"
@@ -509,7 +509,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
     echo "[6/9] Executing Producer ($TIMESTAMP)"
     PRODUCER_COMMAND="$PRODUCER_EXEC --broker $MQTT_BROKER --client-cnt $CURRENT_CAR_NUM \
         --running-time $DURATION --interval-noise-stddev-rate $INTERVAL_NOISE_RATE \
-        --client-spread-start-time $CLIENT_SPREAD_START_TIME \
+        --client-spread-time $CLIENT_SPREAD_TIME \
         --client-spread-interval $CLIENT_SPREAD_INTERVAL \
         $VERBOSE_TAG"
     if [ -z "$PRODUCER_HOST" ]; then
