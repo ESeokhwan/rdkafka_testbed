@@ -148,7 +148,10 @@ int main(int argc, char *argv[]) {
 void V2xMqttExprProducerApp::run() {
     init_clients();
 
-    int possible_spread_step_cnt = args.client_spread_time / args.client_spread_interval;
+    int possible_spread_step_cnt = 1;
+    if (args.client_spread_time > 0 && args.client_spread_interval > 0) {
+        possible_spread_step_cnt = args.client_spread_time / args.client_spread_interval;
+    }
     int client_cnt_per_spread_step = (int) std::ceil((double) args.client_cnt / (double) possible_spread_step_cnt);
     start_barrier(args.start_barrier_delay);
     for (int i = 0; i < possible_spread_step_cnt; i++) {
@@ -158,7 +161,9 @@ void V2xMqttExprProducerApp::run() {
             auto cur_start_signal = start_signals.at(cur_idx);
             cur_start_signal->count_down();
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(args.client_spread_interval));
+        if (i < possible_spread_step_cnt - 1) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(args.client_spread_interval));
+        }
     }
 
     join_clients();
