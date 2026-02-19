@@ -6,7 +6,7 @@
 #include <queue>
 #include <chrono>
 #include <latch>
-#include <boost/asio.hpp>
+#include <condition_variable>
 
 namespace common {
 
@@ -27,30 +27,22 @@ private:
     util::Noises noises;
 
     std::latch *start_signal;
-    std::unique_ptr<std::latch> completion_signal;
-
-    std::thread io_thread;
-    boost::asio::io_context io_context;
-    boost::asio::steady_timer scheduler_timer;
-    boost::asio::thread_pool pool;
-    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work_guard;
 
     std::priority_queue<ScheduleEntry, std::vector<ScheduleEntry>, std::greater<ScheduleEntry>> schedule_queue;
     std::mutex queue_mutex;
 
-    std::atomic<size_t> current_service_idx{0};
+    std::condition_variable close_cv;
     std::atomic<bool> is_closed{false};
 
     void warmup();
     void init_first_schedules();
-    void start_next_task();
-    void process_task(ScheduleEntry entry);
+    void run_schedules();
 
 public:
     ServicesRunner(std::vector<std::shared_ptr<IService>> svcs, 
                    std::shared_ptr<IService> warmup_svc,
                    double interval, double stddev, double max_noise, 
-                   std::mt19937& rng, std::latch *start_sig, int pool_size);
+                   std::mt19937& rng, std::latch *start_sig);
     virtual ~ServicesRunner();
 
     void run();
