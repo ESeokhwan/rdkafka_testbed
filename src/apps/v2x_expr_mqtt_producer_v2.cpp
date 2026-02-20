@@ -256,11 +256,10 @@ void V2xMqttExprProducerAppV2::publish_message(
 ) {
     std::string core_msg = topic_name + "_" + std::to_string(idx);
 
-    int64_t requested_at = util::get_current_timestamp();
-    std::string msg = adaptor->generate(core_msg, requested_at, service_name);
+    std::string msg = adaptor->generate(core_msg, service_name);
     if (!args.log_disabled) {
         monitor_queue->enqueue(std::make_unique<moniq::MonitorLog>(
-            core_msg, "REQUEST", requested_at
+            core_msg, "REQUEST", util::get_current_timestamp()
         ));
         writer->notify_if_needed();
     }

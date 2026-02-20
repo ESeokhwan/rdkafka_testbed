@@ -88,11 +88,11 @@ void MosqProducerService::work() {
     std::string core_msg = topic_name + "_" + std::to_string(idx);
     if (msg_tagged && log_enabled) core_msg = "R" + core_msg;
 
-    int64_t requested_at = util::get_current_timestamp();
-    std::string msg = this->adaptor->generate(core_msg, requested_at, service_name);
+    std::string msg = this->adaptor->generate(core_msg, service_name);
     if (log_enabled) {
         monitor_queue->enqueue(std::make_unique<moniq::MonitorLog>(
-            core_msg, "REQUEST", requested_at));
+            core_msg, "REQUEST", util::get_current_timestamp()
+        ));
         writer->notify_if_needed();
     }
     int rc = mosquitto_publish(this->mosq_client, nullptr,

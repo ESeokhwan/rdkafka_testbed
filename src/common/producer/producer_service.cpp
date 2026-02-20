@@ -97,7 +97,8 @@ void ProducerService::work() {
     if (log_enabled) {
         int64_t requested_at = util::get_current_timestamp();
         monitor_queue->enqueue(std::make_unique<moniq::MonitorLog>(
-            core_msg, "REQUEST", requested_at));
+            core_msg, "REQUEST", requested_at
+        ));
         writer->notify_if_needed();
     }
     producer->produce(
