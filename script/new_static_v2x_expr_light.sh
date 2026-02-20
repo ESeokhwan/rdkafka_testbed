@@ -45,8 +45,8 @@ DURATION=100
 NUM_CAR=(10)
 
 PRODUCER_WAKEUP_INTERVAL=5
-CLIENT_SPREAD_TIME=100
-CLIENT_SPREAD_INTERVAL=5
+PRODUCER_SPREAD_TIME=100
+PRODUCER_SPREAD_INTERVAL=5
 
 MONITORING_EPOCH_SIZE=1000.0
 
@@ -62,7 +62,7 @@ TEMP=$(getopt -o d:vh --longoptions \
     load-consumer-exec:, measure-consumer-host:, measure-consumer-root:, measure-consumer-out:,\
     measure-consumer-temp:, measure-consumer-exec:, producer-host:, producer-root:, producer-out:, \
     producer-temp:, producer-exec:, duration:, num-car:, \
-    producer-wakeup-interval:, client-spread-time:, client-spread-interval:, \
+    producer-wakeup-interval:, producer-spread-time:, producer-spread-interval:, \
     monitoring-epoch-size:, terminate-timeout:" \
     -n 'myscript' -- "$@" \
 )
@@ -98,8 +98,8 @@ CL_TERMINATE_TIMEOUT=""
 CL_DURATION=""
 CL_NUM_CAR=()
 CL_PRODUCER_WAKEUP_INTERVAL=""
-CL_CLIENT_SPREAD_TIME=""
-CL_CLIENT_SPREAD_INTERVAL=""
+CL_PRODUCER_SPREAD_TIME=""
+CL_PRODUCER_SPREAD_INTERVAL=""
 CL_MONITORING_EPOCH_SIZE=""
 CL_VERBOSE=""
 
@@ -134,8 +134,8 @@ while true ; do
         -d|--duration) CL_DURATION="$2" ; shift 2 ;;
         --num-car) IFS=',' read -r -a CL_NUM_CAR <<< "$2" ; shift 2 ;;
         --producer-wakeup-interval) CL_PRODUCER_WAKEUP_INTERVAL="$2" ; shift 2 ;;
-        --client-spread-time) CL_CLIENT_SPREAD_TIME="$2" ; shift 2 ;;
-        --client-spread-interval) CL_CLIENT_SPREAD_INTERVAL="$2" ; shift 2 ;;
+        --producer-spread-time) CL_PRODUCER_SPREAD_TIME="$2" ; shift 2 ;;
+        --producer-spread-interval) CL_PRODUCER_SPREAD_INTERVAL="$2" ; shift 2 ;;
         --monitoring-epoch-size) CL_MONITORING_EPOCH_SIZE="$2" ; shift 2 ;;
         -v|--verbose) CL_VERBOSE=1 ; shift ;;
         -h|--help) HELP=1 ; shift ;;
@@ -179,8 +179,8 @@ if [ "$HELP" -eq 1 ]; then
     echo "  -d, --duration <seconds>                 Duration for the test run. (Default: 100)"
     echo "      --num-car <num1,num2,...>            Comma-separated list of car counts for the test. (Default: (10))"
     echo "      --producer-wakeup-interval <ms>      Interval in milliseconds for producer wakeup to check whether produce or not. (Default: 5)"
-    echo "      --client-spread-time <ms>            Time in milliseconds to spread client startups. (Default: 100)"
-    echo "      --client-spread-interval <ms>        Interval in milliseconds between each client startup. (Default: 5)"
+    echo "      --producer-spread-time <ms>          Time in milliseconds to spread producer clients during startup. (Default: 100)"
+    echo "      --producer-spread-interval <ms>      Interval in milliseconds between each producer client startup. (Default: 5)"
     echo "      --monitoring-epoch-size <f>          Epoch size in milli seconds of calculating throughput, reliability, and more. (Default: 1000.0)"
     echo "  -v, --verbose                            Enable verbose output. (Config key: VERBOSE=1)"
     echo "  -h, --help                               Display this help message and exit."
@@ -287,11 +287,11 @@ fi
 if [ -n "$CL_PRODUCER_WAKEUP_INTERVAL" ]; then
     PRODUCER_WAKEUP_INTERVAL="$CL_PRODUCER_WAKEUP_INTERVAL"
 fi
-if [ -n "$CL_CLIENT_SPREAD_TIME" ]; then
-    CLIENT_SPREAD_TIME="$CL_CLIENT_SPREAD_TIME"
+if [ -n "$CL_PRODUCER_SPREAD_TIME" ]; then
+    PRODUCER_SPREAD_TIME="$CL_PRODUCER_SPREAD_TIME"
 fi
-if [ -n "$CL_CLIENT_SPREAD_INTERVAL" ]; then
-    CLIENT_SPREAD_INTERVAL="$CL_CLIENT_SPREAD_INTERVAL"
+if [ -n "$CL_PRODUCER_SPREAD_INTERVAL" ]; then
+    PRODUCER_SPREAD_INTERVAL="$CL_PRODUCER_SPREAD_INTERVAL"
 fi
 if [ -n "$CL_MONITORING_EPOCH_SIZE" ]; then
     MONITORING_EPOCH_SIZE="$CL_MONITORING_EPOCH_SIZE"
@@ -367,9 +367,9 @@ if [ "$VERBOSE" -eq 1 ]; then
     echo "Terminate Timeout:      $TERMINATE_TIMEOUT"
     echo "Duration:               $DURATION"
     echo "Num Car:                $NUM_CAR"
-    echo "Producer Wakeup Interval (ms): $PRODUCER_WAKEUP_INTERVAL"
-    echo "Client Spread Start Time (ms): $CLIENT_SPREAD_TIME"
-    echo "Client Spread Interval (ms):   $CLIENT_SPREAD_INTERVAL"
+    echo "Producer Wakeup Interval (ms):  $PRODUCER_WAKEUP_INTERVAL"
+    echo "Producer Spread Start Time (ms): $PRODUCER_SPREAD_TIME"
+    echo "Producer Spread Interval (ms):   $PRODUCER_SPREAD_INTERVAL"
     echo "Monitoring Epoch Size:  $MONITORING_EPOCH_SIZE"
     echo "Verbose Mode:           $VERBOSE"
     echo "--------------------------"
@@ -511,8 +511,8 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
     PRODUCER_COMMAND="$PRODUCER_EXEC --broker $MQTT_BROKER --client-cnt $CURRENT_CAR_NUM \
         --running-time $DURATION --no-log \
         --wakeup-interval $PRODUCER_WAKEUP_INTERVAL \
-        --client-spread-time $CLIENT_SPREAD_TIME \
-        --client-spread-interval $CLIENT_SPREAD_INTERVAL \
+        --client-spread-time $PRODUCER_SPREAD_TIME \
+        --client-spread-interval $PRODUCER_SPREAD_INTERVAL \
         $VERBOSE_TAG"
     if [ -z "$PRODUCER_HOST" ]; then
         eval $PRODUCER_COMMAND
