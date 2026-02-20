@@ -174,7 +174,7 @@ if [ "$HELP" -eq 1 ]; then
     echo "      --producer-root <path>               Root directory of Producer (Default: client)"
     echo "      --producer-out <path>                Output root directory for Producer logs. (Default: {producer-root}/out)"
     echo "      --producer-temp <path>               Temporary root directory for Producer files. (Default: {producer-root}/temp)"
-    echo "      --producer-exec <name>               Executable name for Producer. (Default: {producer-root}/bin/v2x_expr_mqtt_producer)"
+    echo "      --producer-exec <name>               Executable name for Producer. (Default: {producer-root}/bin/v2x_expr_mqtt_producer_light)"
     echo "      --terminate-timeout <seconds>        Timeout second to wait before force killing (Default: 60)."
     echo "  -d, --duration <seconds>                 Duration for the test run. (Default: 100)"
     echo "      --num-car <num1,num2,...>            Comma-separated list of car counts for the test. (Default: (10))"
@@ -335,7 +335,7 @@ if [ -z "$PRODUCER_TEMP" ]; then
     PRODUCER_TEMP=${PRODUCER_ROOT}/temp
 fi
 if [ -z "$PRODUCER_EXEC" ]; then
-    PRODUCER_EXEC=${PRODUCER_ROOT}/bin/v2x_expr_mqtt_producer_v2
+    PRODUCER_EXEC=${PRODUCER_ROOT}/bin/v2x_expr_mqtt_producer_light
 fi
 
 # --- Script Logic ---
