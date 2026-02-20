@@ -77,7 +77,6 @@ private:
 
     void init_clients();
     void start_uniformly();
-    void cleanup_mosq_clients();
     void join_clients();
 
 public:
@@ -152,7 +151,6 @@ void V2xMqttExprProducerAppV2::run() {
     init_clients();
     start_uniformly();
     join_clients();
-    cleanup_mosq_clients();
 }
 
 void V2xMqttExprProducerAppV2::init_clients() {
@@ -192,7 +190,7 @@ void V2xMqttExprProducerAppV2::join_clients() {
     }
 }
 
-void V2xMqttExprProducerAppV2::cleanup_mosq_clients() {
+void V2xMqttExprProducerAppV2::cleanup_main() {
     mosquitto_lib_cleanup();
 }
 
