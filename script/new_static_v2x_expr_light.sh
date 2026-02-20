@@ -44,7 +44,7 @@ DURATION=100
 
 NUM_CAR=(10)
 
-INTERVAL_NOISE_RATE=0.0
+PRODUCER_WAKEUP_INTERVAL=5
 CLIENT_SPREAD_TIME=100
 CLIENT_SPREAD_INTERVAL=5
 
@@ -61,8 +61,9 @@ TEMP=$(getopt -o d:vh --longoptions \
     load-consumer-host:, load-consumer-root:, load-consumer-out:, load-consumer-temp:, \
     load-consumer-exec:, measure-consumer-host:, measure-consumer-root:, measure-consumer-out:,\
     measure-consumer-temp:, measure-consumer-exec:, producer-host:, producer-root:, producer-out:, \
-    producer-temp:, producer-exec:, duration:, num-car:, interval-noise-rate:, \
-    client-spread-time:, client-spread-interval:, monitoring-epoch-size:, terminate-timeout:" \
+    producer-temp:, producer-exec:, duration:, num-car:, \
+    producer-wakeup-interval:, client-spread-time:, client-spread-interval:, \
+    monitoring-epoch-size:, terminate-timeout:" \
     -n 'myscript' -- "$@" \
 )
 
@@ -96,7 +97,7 @@ CL_PRODUCER_EXEC=""
 CL_TERMINATE_TIMEOUT=""
 CL_DURATION=""
 CL_NUM_CAR=()
-CL_INTERVAL_NOISE_RATE=""
+CL_PRODUCER_WAKEUP_INTERVAL=""
 CL_CLIENT_SPREAD_TIME=""
 CL_CLIENT_SPREAD_INTERVAL=""
 CL_MONITORING_EPOCH_SIZE=""
@@ -132,7 +133,7 @@ while true ; do
         --terminate-timeout) CL_TERMINATE_TIMEOUT="$2" ; shift 2 ;;
         -d|--duration) CL_DURATION="$2" ; shift 2 ;;
         --num-car) IFS=',' read -r -a CL_NUM_CAR <<< "$2" ; shift 2 ;;
-        --interval-noise-rate) CL_INTERVAL_NOISE_RATE="$2" ; shift 2 ;;
+        --producer-wakeup-interval) CL_PRODUCER_WAKEUP_INTERVAL="$2" ; shift 2 ;;
         --client-spread-time) CL_CLIENT_SPREAD_TIME="$2" ; shift 2 ;;
         --client-spread-interval) CL_CLIENT_SPREAD_INTERVAL="$2" ; shift 2 ;;
         --monitoring-epoch-size) CL_MONITORING_EPOCH_SIZE="$2" ; shift 2 ;;
@@ -177,7 +178,7 @@ if [ "$HELP" -eq 1 ]; then
     echo "      --terminate-timeout <seconds>        Timeout second to wait before force killing (Default: 60)."
     echo "  -d, --duration <seconds>                 Duration for the test run. (Default: 100)"
     echo "      --num-car <num1,num2,...>            Comma-separated list of car counts for the test. (Default: (10))"
-    echo "      --interval-noise-rate <f>            Standard deviation of noise to add to produce interval (Default: 0.0)"
+    echo "      --producer-wakeup-interval <ms>      Interval in milliseconds for producer wakeup to check whether produce or not. (Default: 5)"
     echo "      --client-spread-time <ms>            Time in milliseconds to spread client startups. (Default: 100)"
     echo "      --client-spread-interval <ms>        Interval in milliseconds between each client startup. (Default: 5)"
     echo "      --monitoring-epoch-size <f>          Epoch size in milli seconds of calculating throughput, reliability, and more. (Default: 1000.0)"
@@ -283,8 +284,8 @@ fi
 if [ ${#CL_NUM_CAR[@]} -gt 0 ]; then
     NUM_CAR=("${CL_NUM_CAR[@]}")
 fi
-if [ -n "$CL_INTERVAL_NOISE_RATE" ]; then
-    INTERVAL_NOISE_RATE="$CL_INTERVAL_NOISE_RATE"
+if [ -n "$CL_PRODUCER_WAKEUP_INTERVAL" ]; then
+    PRODUCER_WAKEUP_INTERVAL="$CL_PRODUCER_WAKEUP_INTERVAL"
 fi
 if [ -n "$CL_CLIENT_SPREAD_TIME" ]; then
     CLIENT_SPREAD_TIME="$CL_CLIENT_SPREAD_TIME"
@@ -366,7 +367,7 @@ if [ "$VERBOSE" -eq 1 ]; then
     echo "Terminate Timeout:      $TERMINATE_TIMEOUT"
     echo "Duration:               $DURATION"
     echo "Num Car:                $NUM_CAR"
-    echo "Interval Noise Rate:    $INTERVAL_NOISE_RATE"
+    echo "Producer Wakeup Interval (ms): $PRODUCER_WAKEUP_INTERVAL"
     echo "Client Spread Start Time (ms): $CLIENT_SPREAD_TIME"
     echo "Client Spread Interval (ms):   $CLIENT_SPREAD_INTERVAL"
     echo "Monitoring Epoch Size:  $MONITORING_EPOCH_SIZE"
@@ -509,6 +510,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
     echo "[6/9] Executing Producer ($TIMESTAMP)"
     PRODUCER_COMMAND="$PRODUCER_EXEC --broker $MQTT_BROKER --client-cnt $CURRENT_CAR_NUM \
         --running-time $DURATION --no-log \
+        --wakeup-interval $PRODUCER_WAKEUP_INTERVAL \
         --client-spread-time $CLIENT_SPREAD_TIME \
         --client-spread-interval $CLIENT_SPREAD_INTERVAL \
         $VERBOSE_TAG"
