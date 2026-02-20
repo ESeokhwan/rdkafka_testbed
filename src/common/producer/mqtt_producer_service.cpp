@@ -92,7 +92,8 @@ void MosqProducerService::work() {
     if (log_enabled) {
         double requested_at = double(util::get_current_timestamp());
         monitor_queue->enqueue(std::make_unique<moniq::MonitorLog>(
-            core_msg, "REQUEST", requested_at));
+            core_msg, "REQUEST", util::get_current_timestamp()
+        ));
         writer->notify_if_needed();
     }
     int rc = mosquitto_publish(this->mosq_client, nullptr,

@@ -44,7 +44,7 @@ DURATION=100
 
 NUM_CAR=(10)
 
-INTERVAL_NOISE_RATE=0.0
+PRODUCER_WAKEUP_INTERVAL=5
 PRODUCER_SPREAD_TIME=100
 PRODUCER_SPREAD_INTERVAL=5
 
@@ -61,8 +61,9 @@ TEMP=$(getopt -o d:vh --longoptions \
     load-consumer-host:, load-consumer-root:, load-consumer-out:, load-consumer-temp:, \
     load-consumer-exec:, measure-consumer-host:, measure-consumer-root:, measure-consumer-out:,\
     measure-consumer-temp:, measure-consumer-exec:, producer-host:, producer-root:, producer-out:, \
-    producer-temp:, producer-exec:, duration:, num-car:, interval-noise-rate:, \
-    producer-spread-time:, producer-spread-interval:, monitoring-epoch-size:, terminate-timeout:" \
+    producer-temp:, producer-exec:, duration:, num-car:, \
+    producer-wakeup-interval:, producer-spread-time:, producer-spread-interval:, \
+    monitoring-epoch-size:, terminate-timeout:" \
     -n 'myscript' -- "$@" \
 )
 
@@ -96,7 +97,7 @@ CL_PRODUCER_EXEC=""
 CL_TERMINATE_TIMEOUT=""
 CL_DURATION=""
 CL_NUM_CAR=()
-CL_INTERVAL_NOISE_RATE=""
+CL_PRODUCER_WAKEUP_INTERVAL=""
 CL_PRODUCER_SPREAD_TIME=""
 CL_PRODUCER_SPREAD_INTERVAL=""
 CL_MONITORING_EPOCH_SIZE=""
@@ -132,7 +133,7 @@ while true ; do
         --terminate-timeout) CL_TERMINATE_TIMEOUT="$2" ; shift 2 ;;
         -d|--duration) CL_DURATION="$2" ; shift 2 ;;
         --num-car) IFS=',' read -r -a CL_NUM_CAR <<< "$2" ; shift 2 ;;
-        --interval-noise-rate) CL_INTERVAL_NOISE_RATE="$2" ; shift 2 ;;
+        --producer-wakeup-interval) CL_PRODUCER_WAKEUP_INTERVAL="$2" ; shift 2 ;;
         --producer-spread-time) CL_PRODUCER_SPREAD_TIME="$2" ; shift 2 ;;
         --producer-spread-interval) CL_PRODUCER_SPREAD_INTERVAL="$2" ; shift 2 ;;
         --monitoring-epoch-size) CL_MONITORING_EPOCH_SIZE="$2" ; shift 2 ;;
@@ -173,11 +174,11 @@ if [ "$HELP" -eq 1 ]; then
     echo "      --producer-root <path>               Root directory of Producer (Default: client)"
     echo "      --producer-out <path>                Output root directory for Producer logs. (Default: {producer-root}/out)"
     echo "      --producer-temp <path>               Temporary root directory for Producer files. (Default: {producer-root}/temp)"
-    echo "      --producer-exec <name>               Executable name for Producer. (Default: {producer-root}/bin/v2x_expr_with_thor_mqtt_producer)"
+    echo "      --producer-exec <name>               Executable name for Producer. (Default: {producer-root}/bin/v2x_expr_with_thor_mqtt_producer_light)"
     echo "      --terminate-timeout <seconds>        Timeout second to wait before force killing (Default: 60)."
     echo "  -d, --duration <seconds>                 Duration for the test run. (Default: 100)"
     echo "      --num-car <num1,num2,...>            Comma-separated list of car counts for the test. (Default: (10))"
-    echo "      --interval-noise-rate <f>            Standard deviation of noise to add to produce interval (Default: 0.0)"
+    echo "      --producer-wakeup-interval <ms>      Interval in milliseconds for producer wakeup to check whether produce or not. (Default: 5)"
     echo "      --producer-spread-time <ms>          Time in milliseconds to spread producer clients during startup. (Default: 100)"
     echo "      --producer-spread-interval <ms>      Interval in milliseconds between each producer client startup. (Default: 5)"
     echo "      --monitoring-epoch-size <f>          Epoch size in milli seconds of calculating throughput, reliability, and more. (Default: 1000.0)"
@@ -283,8 +284,8 @@ fi
 if [ ${#CL_NUM_CAR[@]} -gt 0 ]; then
     NUM_CAR=("${CL_NUM_CAR[@]}")
 fi
-if [ -n "$CL_INTERVAL_NOISE_RATE" ]; then
-    INTERVAL_NOISE_RATE="$CL_INTERVAL_NOISE_RATE"
+if [ -n "$CL_PRODUCER_WAKEUP_INTERVAL" ]; then
+    PRODUCER_WAKEUP_INTERVAL="$CL_PRODUCER_WAKEUP_INTERVAL"
 fi
 if [ -n "$CL_PRODUCER_SPREAD_TIME" ]; then
     PRODUCER_SPREAD_TIME="$CL_PRODUCER_SPREAD_TIME"
@@ -334,7 +335,7 @@ if [ -z "$PRODUCER_TEMP" ]; then
     PRODUCER_TEMP=${PRODUCER_ROOT}/temp
 fi
 if [ -z "$PRODUCER_EXEC" ]; then
-    PRODUCER_EXEC=${PRODUCER_ROOT}/bin/v2x_expr_with_thor_mqtt_producer
+    PRODUCER_EXEC=${PRODUCER_ROOT}/bin/v2x_expr_with_thor_mqtt_producer_light
 fi
 
 # --- Script Logic ---
@@ -366,7 +367,7 @@ if [ "$VERBOSE" -eq 1 ]; then
     echo "Terminate Timeout:      $TERMINATE_TIMEOUT"
     echo "Duration:               $DURATION"
     echo "Num Car:                $NUM_CAR"
-    echo "Interval Noise Rate:    $INTERVAL_NOISE_RATE"
+    echo "Producer Wakeup Interval (ms):   $PRODUCER_WAKEUP_INTERVAL"
     echo "Producer Spread Start Time (ms): $PRODUCER_SPREAD_TIME"
     echo "Producer Spread Interval (ms):   $PRODUCER_SPREAD_INTERVAL"
     echo "Monitoring Epoch Size:  $MONITORING_EPOCH_SIZE"
@@ -506,7 +507,8 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     echo "[6/9] Executing Producer ($TIMESTAMP)"
     PRODUCER_COMMAND="$PRODUCER_EXEC --broker $MQTT_BROKER --client-cnt $CURRENT_CAR_NUM --start-idx 1 \
-        --running-time $DURATION --interval-noise-stddev-rate $INTERVAL_NOISE_RATE \
+        --running-time $DURATION --no-log \
+        --wakeup-interval $PRODUCER_WAKEUP_INTERVAL \
         --client-spread-time $PRODUCER_SPREAD_TIME \
         --client-spread-interval $PRODUCER_SPREAD_INTERVAL \
         $VERBOSE_TAG"

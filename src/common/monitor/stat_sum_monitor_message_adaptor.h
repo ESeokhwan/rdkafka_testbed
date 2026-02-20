@@ -10,7 +10,6 @@ public:
     using ILatencyMonitoringMessageAdaptor::generate;
 
     virtual std::string generate(std::string message_id, std::string service_name) = 0;
-
     virtual std::string generate(std::string message_id, int64_t requested_at, std::string service_name) = 0;
 
     virtual std::string extract_service_name(const std::string& message) const = 0;
@@ -19,8 +18,8 @@ public:
 class StatSumMonitorMessageAdaptor: public IStatSumMonitorMessageAdaptor {
 protected:
     virtual std::string generate_with_root_adaptor(std::string message_id) = 0;
-    virtual std::string generate_with_root_adaptor(std::string message_id, std::string service_name) = 0;
     virtual std::string generate_with_root_adaptor(std::string message_id, int64_t requested_at) = 0;
+    virtual std::string generate_with_root_adaptor(std::string message_id, std::string service_name) = 0;
     virtual std::string generate_with_root_adaptor(std::string message_id, int64_t requested_at, std::string service_name) = 0;
     virtual std::string extract_content_with_root_adaptor(const std::string& message) const = 0;
     virtual int64_t extract_requested_at_with_root_adaptor(const std::string& message) const = 0;
@@ -66,8 +65,8 @@ private:
 
 protected:
     virtual std::string generate_with_root_adaptor(std::string message_id) override;
-    virtual std::string generate_with_root_adaptor(std::string message_id, std::string service_name) override;
     virtual std::string generate_with_root_adaptor(std::string message_id, int64_t requested_at) override;
+    virtual std::string generate_with_root_adaptor(std::string message_id, std::string service_name) override;
     virtual std::string generate_with_root_adaptor(std::string message_id, int64_t requested_at, std::string service_name) override;
     virtual std::string extract_content_with_root_adaptor(const std::string& message) const override;
     virtual int64_t extract_requested_at_with_root_adaptor(const std::string& message) const override;
@@ -85,9 +84,8 @@ private:
 
 protected:
     virtual std::string generate_with_root_adaptor(std::string message_id) override;
-
-    virtual std::string generate_with_root_adaptor(std::string message_id, std::string service_name) override;
     virtual std::string generate_with_root_adaptor(std::string message_id, int64_t requested_at) override;
+    virtual std::string generate_with_root_adaptor(std::string message_id, std::string service_name) override;
     virtual std::string generate_with_root_adaptor(std::string message_id, int64_t requested_at, std::string service_name) override;
     virtual std::string extract_content_with_root_adaptor(const std::string& message) const override;
     virtual int64_t extract_requested_at_with_root_adaptor(const std::string& message) const override;

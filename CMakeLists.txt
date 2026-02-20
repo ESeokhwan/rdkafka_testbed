@@ -23,7 +23,6 @@ endif()
 
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 find_package(Threads REQUIRED)
-find_package(Boost REQUIRED COMPONENTS system)
 find_package(unofficial-mosquitto CONFIG REQUIRED)
 
 add_subdirectory(libmoniq)
@@ -60,8 +59,9 @@ target_include_directories(common PUBLIC
 )
 
 target_link_libraries(common PUBLIC
-    Boost::system
     moniq
+    unofficial::mosquitto::mosquitto
+    unofficial::mosquitto::mosquittopp
 )
 
 file(GLOB APP_SOURCES
@@ -78,7 +78,6 @@ foreach(source_file ${APP_SOURCES})
         unofficial::mosquitto::mosquitto
         unofficial::mosquitto::mosquittopp
         Threads::Threads
-        Boost::system
     )
 endforeach()
 

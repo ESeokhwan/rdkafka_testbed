@@ -49,7 +49,6 @@ struct Arguments {
 
     int start_barrier_delay;
     int monitoring_batch_size;
-    int service_runner_pool_size;
 
     bool scrapable;
     bool verbose;
@@ -128,7 +127,6 @@ int main(int argc, char *argv[]) {
             << "Warmup Topic: " << args.warmup_topic << "\n"
             << "Start Barrier Delay: " << args.start_barrier_delay << "\n"
             << "Monitoring Batch Size: " << args.monitoring_batch_size << "\n"
-            << "Service Runner Pool Size: " << args.service_runner_pool_size << "\n"
             << "Scrapable: " << (args.scrapable ? "on" : "off") << endl;
     }
 
@@ -226,7 +224,7 @@ void BasicProducersTest::init_sharing_prod_services() {
         services_runners.push_back(make_unique<ServicesRunner>(
             services, warmup_service, args.interval_btw_topic, 
             args.interval_btw_topic_noise_stddev, args.interval_btw_topic / 2,
-            rng, &start_signal, args.service_runner_pool_size
+            rng, &start_signal
         ));
     }
 }
@@ -278,7 +276,7 @@ void BasicProducersTest::init_standalone_services() {
         services_runners.push_back(make_unique<ServicesRunner>(
             services, warmup_service, args.interval_btw_topic, 
             args.interval_btw_topic_noise_stddev, args.interval_btw_topic / 2,
-            rng, &start_signal, args.service_runner_pool_size
+            rng, &start_signal
         ));
     }
 }
@@ -336,7 +334,6 @@ Arguments parse_arguments(int argc, char** argv) {
     args.warmup_topic = "test_warmup";
     args.start_barrier_delay = 2;
     args.monitoring_batch_size = -1;
-    args.service_runner_pool_size = 8;
     args.scrapable = false;
     args.verbose = false;
     static vector<util::OptionWrapper> options = {
@@ -361,7 +358,6 @@ Arguments parse_arguments(int argc, char** argv) {
         util::WARMUP_TOPIC_OPTION,
         util::START_BARRIER_DELAY_OPTION,
         util::MONITORING_BATCH_SIZE_OPTION,
-        util::SERVICE_RUNNER_POOL_SIZE_OPTION,
         util::SCRAPABLE_OPTION,
         util::VERBOSE_OPTION,
     };
@@ -391,7 +387,6 @@ Arguments parse_arguments(int argc, char** argv) {
             case util::WARMUP_TOPIC_OPTION.get_val(): args.warmup_topic = optarg; break;
             case util::START_BARRIER_DELAY_OPTION.get_val(): args.start_barrier_delay = atoi(optarg); break;
             case util::MONITORING_BATCH_SIZE_OPTION.get_val(): args.monitoring_batch_size = atoi(optarg); break;
-            case util::SERVICE_RUNNER_POOL_SIZE_OPTION.get_val(): args.service_runner_pool_size = atoi(optarg); break;
             case util::SCRAPABLE_OPTION.get_val(): args.scrapable = true; break;
             case util::VERBOSE_OPTION.get_val(): args.verbose = true; break;
             default:
