@@ -49,14 +49,15 @@ struct Arguments {
 
 struct ServiceConf {
     string service_name;
-    std::chrono::duration<double, std::milli> interval_duration;
+    int data_rate;
     int msg_size;
 };
 
 struct ServiceInfo {
     struct ServiceConf conf;
-
+    int max_cnt;
     shared_ptr<common::monitor::StatSumMonitorMessageGenerator> adaptor;
+
     int cur_idx;
     std::chrono::duration<long double, std::milli> waited_duration;
 };
@@ -98,10 +99,10 @@ public:
 namespace {
     V2xMqttExprProducerAppV2 *app;
     vector<ServiceConf> service_confs = {
-        {"S50Hz", chrono::duration<long double, milli>(1000.0/50.0), 6500},
-        {"S30Hz", chrono::duration<long double, milli>(1000.0/30.0), 400},
-        {"S10Hz-Info", chrono::duration<long double, milli>(1000.0/10.0), 6500},
-        {"S10Hz-Sensor", chrono::duration<long double, milli>(1000.0/10.0), 1600},
+        {"S50Hz", 50, 6500},
+        {"S30Hz", 30, 400},
+        {"S10Hz-Info", 10, 6500},
+        {"S10Hz-Sensor", 10, 1600},
     };
     atomic<bool> end_flag;
 
@@ -203,11 +204,16 @@ void V2xMqttExprProducerAppV2::client_run(int car_id, shared_ptr<std::latch> sta
 
     int elasped_tick = 0;
     int end_tick = args.running_time * 1000;
-    while (elasped_tick < end_tick) {
+    int max_interval = 0;
+    for (auto &service_info: service_infos) {
+        max_interval = max(max_interval, (int) ceil(1000.0/(double) service_info.conf.data_rate));
+    }
+    while (elasped_tick < end_tick + max_interval) {
         if (end_flag.load(memory_order_acquire)) break;
         std::chrono::milliseconds wakeup_interval_duration(args.wakeup_interval);
         for (auto &service_info: service_infos) {
-            std::chrono::duration<long double, std::milli> interval = service_info.conf.interval_duration;
+            if (service_info.cur_idx >= service_info.max_cnt) continue;
+            auto interval = chrono::duration<long double, milli>(1000.0/(double) service_info.conf.data_rate);
             string name = service_info.conf.service_name;
             service_info.waited_duration += wakeup_interval_duration;
             if (service_info.waited_duration >= interval) {
@@ -235,7 +241,7 @@ vector<ServiceInfo> V2xMqttExprProducerAppV2::make_services() {
         shared_ptr<common::monitor::StatSumMonitorMessageGenerator> adaptor = 
             make_shared<common::monitor::StatSumMonitorMessageGenerator>(service_conf.msg_size, 1000000);
         service_infos.push_back({
-            service_conf, adaptor, 0, 0.0ms
+            service_conf, args.running_time * service_conf.data_rate, adaptor, 0, 0.0ms
         });
     }
     return service_infos;
