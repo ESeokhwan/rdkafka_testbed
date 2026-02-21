@@ -27,7 +27,7 @@ bool subscribe_topics(RdKafka::KafkaConsumer *consumer, std::vector<std::string>
     return true;
 }
 
-std::optional<std::string> consume_message(
+RdKafka::Message *consume_message(
     RdKafka::KafkaConsumer* consumer,
     int poll_time
 ) {
@@ -37,12 +37,9 @@ std::optional<std::string> consume_message(
             std::cerr << "Consume Error: " << msg->errstr() << std::endl;
         }
         delete msg;
-        return std::nullopt;
+        return nullptr;
     }
-
-    std::string output = std::string(static_cast<const char*>(msg->payload()));
-    delete msg;
-    return output;
+    return msg;
 }
 
 }

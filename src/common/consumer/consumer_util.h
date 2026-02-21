@@ -2,7 +2,6 @@
 
 #include <string>
 #include <memory>
-#include <optional>
 #include <vector>
 
 #include <librdkafka/rdkafkacpp.h>
@@ -17,7 +16,7 @@ bool subscribe_topics(
     std::vector<std::string> &topics
 );
 
-std::optional<std::string> consume_message(
+RdKafka::Message * consume_message(
     RdKafka::KafkaConsumer* consumer,
     int poll_time
 );
