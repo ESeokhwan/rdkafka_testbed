@@ -189,7 +189,7 @@ void V2xMqttExprProducerApp::init_clients() {
         std::shared_ptr<std::latch> cur_start_signal = std::make_shared<std::latch>(1);
         start_signals.push_back(cur_start_signal);
         services_runners.push_back(make_unique<ServicesRunner>(
-            services, warmup_service, -1, 0, -1, rng, cur_start_signal.get(), min(service_infos.size(), 4UL)
+            services, warmup_service, -1, 0, -1, rng, cur_start_signal.get()
         ));
     }
 
