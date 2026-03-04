@@ -124,6 +124,6 @@ for ((i=START_IDX; i<START_IDX+COUNT; ++i)); do
 done
 if [ $VERBOSE -eq 1 ]; then
     echo "[SB_REGISTER] Waiting for deletion of consumer groups: $TARGETS" >&2
-if
+fi
 
 $KAFKA_BIN_PATH/kafka-run-class.sh kafka.examples.StaticAssignmentAdmin "$BROKER" $TARGETS
