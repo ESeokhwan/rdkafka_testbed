@@ -210,13 +210,13 @@ void V2xMqttExprProducerAppV2::client_run(int car_id, shared_ptr<std::latch> sta
     }
     while (elasped_tick < end_tick + max_interval) {
         if (end_flag.load(memory_order_acquire)) break;
-        std::chrono::milliseconds wakeup_interval_duration(args.wakeup_interval);
+        auto next_wakeup = chrono::steady_clock::now() + chrono::milliseconds(args.wakeup_interval);
         for (auto &service_info: service_infos) {
             if (service_info.cur_idx >= service_info.max_cnt) continue;
             auto interval = chrono::duration<long double, milli>(1000.0/(double) service_info.conf.data_rate);
             string name = service_info.conf.service_name;
-            service_info.waited_duration += wakeup_interval_duration;
-            if (service_info.waited_duration >= interval) {
+            service_info.waited_duration += chrono::milliseconds(args.wakeup_interval);
+            while (service_info.waited_duration >= interval) {
                 publish_message(
                     mosq_client, name,
                     args.topic_prefix + name + "/Car" + to_string(car_id),
@@ -224,11 +224,12 @@ void V2xMqttExprProducerAppV2::client_run(int car_id, shared_ptr<std::latch> sta
                 );
                 service_info.waited_duration -= interval;
                 service_info.cur_idx += 1;
+                if (service_info.cur_idx >= service_info.max_cnt) break;
             }
         }
 
         elasped_tick += args.wakeup_interval;
-        std::this_thread::sleep_for(wakeup_interval_duration);
+        std::this_thread::sleep_until(next_wakeup);
     }
 
     mosquitto_loop_stop(mosq_client, true);
