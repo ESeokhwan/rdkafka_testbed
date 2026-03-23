@@ -118,5 +118,7 @@ EXEC_COMMAND="$EXEC_PATH $@"
 mkdir -p $OUT_DIR
 mkdir -p $TEMP_DIR
 echo "===== Program(${ID}) starts at \$(date) =====" >> $OUT_DIR/$ID.log
-nohup $EXEC_COMMAND >> $OUT_DIR/$ID.log 2>&1 & sleep 2
-pgrep -f "^$EXEC_COMMAND" | head -1 > $TEMP_DIR/$ID.pid
+nohup $EXEC_COMMAND >> $OUT_DIR/$ID.log 2>&1 &
+CURRENT_PID=$!
+echo $CURRENT_PID > "$TEMP_DIR/$ID.pid"
+echo "Successfully started $ID with PID: $CURRENT_PID"
