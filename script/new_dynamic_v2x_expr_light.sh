@@ -397,8 +397,8 @@ start_load_consumers() {
     local from=$1
     local to=$2
 
-    LOAD_CONSUMER_ID="LoadConsumer_${from}_${to}"
-    LOAD_CONSUMER_COMMAND="$LOAD_CONSUMER_ROOT/script/run-on-bg.sh --id $load_consumer_id \
+    local load_consumer_id="LoadConsumer_${from}_${to}"
+    local load_consumer_cmd="$LOAD_CONSUMER_ROOT/script/run-on-bg.sh --id $load_consumer_id \
         --out-dir $LOAD_CONSUMER_OUT --temp-dir $LOAD_CONSUMER_TEMP $VERBOSE_TAG \
         --exec-path $LOAD_CONSUMER_EXEC -- \
             --broker $KAFKA_BROKER --group-prefix group_ \
@@ -407,9 +407,9 @@ start_load_consumers() {
             --monitoring-epoch-size $MONITORING_EPOCH_SIZE \
             --start-barrier-delay 1 $VERBOSE_TAG"
     if [ -z "$LOAD_CONSUMER_HOST" ]; then
-        eval $LOAD_CONSUMER_COMMAND
+        eval $load_consumer_cmd
     else
-        ssh $LOAD_CONSUMER_HOST $LOAD_CONSUMER_COMMAND
+        ssh $LOAD_CONSUMER_HOST $load_consumer_cmd
     fi
     LOAD_CONSUMER_IDS+=("$load_consumer_id")
 }
@@ -419,7 +419,7 @@ start_producers() {
     local to=$2
 
     local producer_id="Producer_${from}_${to}"
-    PRODUCER_COMMAND="$PRODUCER_ROOT/script/run-on-bg.sh --id $producer_id \
+    local producer_cmd="$PRODUCER_ROOT/script/run-on-bg.sh --id $producer_id \
         --out-dir $PRODUCER_OUT --temp-dir $PRODUCER_TEMP $VERBOSE_TAG \
         --exec-path $PRODUCER_EXEC -- \
             --broker $MQTT_BROKER --client-cnt $((to-from)) --start-idx $from \
@@ -429,9 +429,9 @@ start_producers() {
             --client-spread-interval $PRODUCER_SPREAD_INTERVAL \
             --no-log $VERBOSE_TAG"
     if [ -z "$PRODUCER_HOST" ]; then
-        eval $PRODUCER_COMMAND
+        eval $producer_cmd
     else
-        ssh $PRODUCER_HOST $PRODUCER_COMMAND
+        ssh $PRODUCER_HOST $producer_cmd
     fi
     PRODUCER_IDS+=("$producer_id")
 }
