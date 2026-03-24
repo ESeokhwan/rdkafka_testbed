@@ -568,7 +568,7 @@ MEASURE_CONSUMER_COMMAND="$MEASURE_CONSUMER_ROOT/script/run-on-bg.sh --id $MEASU
     --exec-path $MEASURE_CONSUMER_EXEC -- \
         --broker $KAFKA_BROKER --group-prefix r_group_ \
         --client-cnt -1 --running-time $INF_DURATION \
-        --outdir $MEASURE_CONSUMER_OUT --out-prefix Dynamic_ \
+        --outdir $MEASURE_CONSUMER_OUT --out-prefix \"Dynamic_${TIMESTAMP}\" \
         --monitoring-epoch-size $MONITORING_EPOCH_SIZE $VERBOSE_TAG"
 if [ -z "$MEASURE_CONSUMER_HOST" ]; then
     eval $MEASURE_CONSUMER_COMMAND
