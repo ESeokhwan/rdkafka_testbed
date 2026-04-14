@@ -82,7 +82,7 @@ fi
 if [ "$HELP" -eq 1 ]; then
     echo "Usage: $(basename "$0") [OPTIONS] [POSITIONAL_ARG1] [POSITIONAL_ARG2...]"
     echo ""
-    echo "This is a script for deleting Kafka consumer groups with configurable options."
+    echo "This script registers consumer groups for 'service boosting' by performing static partition assignment."
     echo ""
     echo "Options:"
     echo "      --config <path>               Path to a configuration file. (e.g., key=\"value\" pairs)"
@@ -90,7 +90,7 @@ if [ "$HELP" -eq 1 ]; then
     echo "  -b, --broker <host:port>          Kafka broker address. (Default: 127.0.0.1:9092)"
     echo "  -p, --prefix <prefix>             Prefix for consumer group names. (Default: group-)"
     echo "      --start-idx <number>          Starting index for consumer group names. (Default: 0)"
-    echo "  -c, --count <number>              Number of consumer groups to delete. (Default: 0)"
+    echo "  -c, --count <number>              Number of consumer groups to register. (Default: 0)"
     echo "  -v, --verbose                     Enable verbose output. (Config key: VERBOSE=1)"
     echo "  -h, --help                        Display this help message and exit."
     echo ""

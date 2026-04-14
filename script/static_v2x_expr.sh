@@ -147,7 +147,8 @@ done
 if [ "$HELP" -eq 1 ]; then
     echo "Usage: $(basename "$0") [OPTIONS] [POSITIONAL_ARG1] [POSITIONAL_ARG2...]"
     echo ""
-    echo "TODO: "
+    echo "This script orchestrates a static V2X performance experiment."
+    echo "It iterates through a list of fixed client counts, running a complete test iteration for each."
     echo ""
     echo "Options:"
     echo "      --config <path>                      Path to a configuration file. (e.g., key=\"value\" pairs)"

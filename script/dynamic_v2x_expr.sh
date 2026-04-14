@@ -150,7 +150,8 @@ done
 if [ "$HELP" -eq 1 ]; then
     echo "Usage: $(basename "$0") [OPTIONS] [POSITIONAL_ARG1] [POSITIONAL_ARG2...]"
     echo ""
-    echo "TODO: "
+    echo "This script orchestrates a dynamic V2X performance experiment."
+    echo "It simulates time-varying traffic load by scaling producers and consumers up and down at specified intervals."
     echo ""
     echo "Options:"
     echo "      --config <path>                      Path to a configuration file. (e.g., key=\"value\" pairs)"
@@ -541,6 +542,7 @@ NUM_STEPS=${#STEP_CARS[@]}
 MAX_CAR_CNT=${STEP_CARS[$((NUM_STEPS-1))]}
 SERVICE_CNT=6
 
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 echo "[1/9] Executing Connector ($TIMESTAMP)"
 CONNECTOR_ID="Connector_Dynamic"
 CONNECTOR_COMMAND="$CONNECTOR_ROOT/script/run-on-bg.sh --id $CONNECTOR_ID \
