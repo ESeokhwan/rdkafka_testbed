@@ -427,6 +427,7 @@ echo "------------------------------------------------"
 echo "🚀 Starting test script"
 echo "------------------------------------------------"
 
+SERVICE_CNT=6
 INF_DURATION=$((60 * 60 * 10)) # 10 hours
 VERBOSE_TAG=""
 if [ $VERBOSE -eq 1 ]; then
@@ -458,7 +459,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     echo "[2/9] Deleting Consumer Groups ($TIMESTAMP)"
     $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "group_" --count $CURRENT_CAR_NUM $VERBOSE_TAG
-    $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --count 4 $VERBOSE_TAG
+    $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --count $SERVICE_CNT $VERBOSE_TAG
     echo "--------------------------------------------------"
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -503,7 +504,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     echo "[5/9] Checking Consumer Groups connection ($TIMESTAMP)"
     $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "group_" --count $CURRENT_CAR_NUM $VERBOSE_TAG
-    $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --count 4 $VERBOSE_TAG
+    $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --count $SERVICE_CNT $VERBOSE_TAG
     echo "--------------------------------------------------"
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -536,7 +537,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     echo "[8/9] Deleting Consumer Groups ($TIMESTAMP)"
     $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "group_" --count $CURRENT_CAR_NUM $VERBOSE_TAG
-    $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --count 4 $VERBOSE_TAG
+    $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --count $SERVICE_CNT $VERBOSE_TAG
     echo "--------------------------------------------------"
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)

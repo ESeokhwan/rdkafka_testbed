@@ -423,7 +423,7 @@ start_producers() {
         --out-dir $PRODUCER_OUT --temp-dir $PRODUCER_TEMP $VERBOSE_TAG \
         --exec-path $PRODUCER_EXEC -- \
             --broker $MQTT_BROKER --client-cnt $((to-from)) --start-idx $from \
-            --running-time $INF_DURATION --start-barrier-delay 1 \ 
+            --running-time $INF_DURATION --start-barrier-delay 1 \
             --interval-noise-stddev-rate $INTERVAL_NOISE_RATE \
             --client-spread-time $PRODUCER_SPREAD_TIME \
             --client-spread-interval $PRODUCER_SPREAD_INTERVAL \
@@ -539,6 +539,7 @@ PRODUCER_IDS=()
 
 NUM_STEPS=${#STEP_CARS[@]}
 MAX_CAR_CNT=${STEP_CARS[$((NUM_STEPS-1))]}
+SERVICE_CNT=6
 
 echo "[1/9] Executing Connector ($TIMESTAMP)"
 CONNECTOR_ID="Connector_Dynamic"
@@ -557,7 +558,7 @@ echo "--------------------------------------------------"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 echo "[2/9] Deleting Consumer Groups ($TIMESTAMP)"
 $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "group_" --count $MAX_CAR_CNT $VERBOSE_TAG
-$COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --count 4 $VERBOSE_TAG
+$COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --count $SERVICE_CNT $VERBOSE_TAG
 echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -584,7 +585,7 @@ for (( step=0; step<$NUM_STEPS; step++ )); do
     CUR_CAR_NUM=${STEP_CARS[$step]}
     C_START_IDX=$((PREV_CAR_CNT))
     if [ $step -eq 0 ]; then
-        C_START_IDX=4
+        C_START_IDX=$((SERVICE_CNT))
     else
         sleep $STEP_INTERVAL
     fi
@@ -626,7 +627,7 @@ echo "--------------------------------------------------"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 echo "[8/9] Deleting Consumer Groups ($TIMESTAMP)"
 $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "group_" --count $MAX_CAR_CNT $VERBOSE_TAG
-$COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --count 4 $VERBOSE_TAG
+$COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --count $SERVICE_CNT $VERBOSE_TAG
 echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)

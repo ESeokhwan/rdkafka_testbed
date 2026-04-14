@@ -103,6 +103,8 @@ namespace {
         {"S30Hz", 30, 400},
         {"S10Hz-Info", 10, 6500},
         {"S10Hz-Sensor", 10, 1600},
+        {"S10Hz-Info-for-rsu", 10, 6000},
+        {"S50Hz-for-rsu", 50, 6000},
     };
     atomic<bool> end_flag;
 
@@ -239,7 +241,7 @@ void V2xMqttExprProducerAppV2::client_run(int car_id, shared_ptr<std::latch> sta
 vector<ServiceInfo> V2xMqttExprProducerAppV2::make_services() {
     vector<ServiceInfo> service_infos;
     for (auto service_conf: service_confs) {
-        shared_ptr<common::monitor::StatSumMonitorMessageGenerator> adaptor = 
+        shared_ptr<common::monitor::StatSumMonitorMessageGenerator> adaptor =
             make_shared<common::monitor::StatSumMonitorMessageGenerator>(service_conf.msg_size, 1000000);
         service_infos.push_back({
             service_conf, args.running_time * service_conf.data_rate, adaptor, 0, 0.0ms

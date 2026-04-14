@@ -101,6 +101,8 @@ namespace {
         {"S30Hz", 1000.0/30.0, 400},
         {"S10Hz-Info", 1000.0/10.0, 6500},
         {"S10Hz-Sensor", 1000.0/10.0, 1600},
+        {"S10Hz-Info-for-rsu", 1000.0/10.0, 6000},
+        {"S50Hz-for-rsu", 1000.0/50.0, 6000},
     };
 
     Arguments parse_arguments(int argc, char **argv);
