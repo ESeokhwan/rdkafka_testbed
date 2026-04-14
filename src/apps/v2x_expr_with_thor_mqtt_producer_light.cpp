@@ -103,6 +103,8 @@ namespace {
         {"2Cooperative_driving_for_vehicle_platooning_lowest", 30, 400},
         {"1Information_sharing_for_automated_driving", 10, 6500},
         {"0Sensor_information_sharing", 10, 1600},
+        {"4Information_sharing_for_rsu", 10, 6000},
+        {"5Platooning_for_rsu", 50, 6000},
     };
     atomic<bool> end_flag;
 
@@ -239,7 +241,7 @@ void V2xMqttExprProducerAppV2::client_run(int car_id, shared_ptr<std::latch> sta
 vector<ServiceInfo> V2xMqttExprProducerAppV2::make_services() {
     vector<ServiceInfo> service_infos;
     for (auto service_conf: service_confs) {
-        shared_ptr<common::monitor::StatSumMonitorMessageGenerator> adaptor = 
+        shared_ptr<common::monitor::StatSumMonitorMessageGenerator> adaptor =
             make_shared<common::monitor::StatSumMonitorMessageGenerator>(service_conf.msg_size, 1000000);
         service_infos.push_back({
             service_conf, args.running_time * service_conf.data_rate, adaptor, 0, 0.0ms

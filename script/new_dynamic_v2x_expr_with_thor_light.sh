@@ -150,8 +150,6 @@ done
 if [ "$HELP" -eq 1 ]; then
     echo "Usage: $(basename "$0") [OPTIONS] [POSITIONAL_ARG1] [POSITIONAL_ARG2...]"
     echo ""
-    echo "TODO: "
-    echo ""
     echo "Options:"
     echo "      --config <path>                      Path to a configuration file. (e.g., key=\"value\" pairs)"
     echo "      --broker <host:port>                 Kafka broker address. (Default: 127.0.0.1:9092)"
@@ -423,7 +421,7 @@ start_producers() {
         --out-dir $PRODUCER_OUT --temp-dir $PRODUCER_TEMP $VERBOSE_TAG \
         --exec-path $PRODUCER_EXEC -- \
             --broker $MQTT_BROKER --client-cnt $((to-from)) --start-idx $from \
-            --running-time $INF_DURATION --start-barrier-delay 1 \ 
+            --running-time $INF_DURATION --start-barrier-delay 1 \
             --wakeup-interval $PRODUCER_WAKEUP_INTERVAL \
             --client-spread-time $PRODUCER_SPREAD_TIME \
             --client-spread-interval $PRODUCER_SPREAD_INTERVAL \
@@ -539,7 +537,9 @@ PRODUCER_IDS=()
 
 NUM_STEPS=${#STEP_CARS[@]}
 MAX_CAR_CNT=${STEP_CARS[$((NUM_STEPS-1))]}
+SERVICE_CNT=6
 
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 echo "[1/9] Executing Connector ($TIMESTAMP)"
 CONNECTOR_ID="Connector_Dynamic"
 CONNECTOR_COMMAND="$CONNECTOR_ROOT/script/run-on-bg.sh --id $CONNECTOR_ID \
@@ -555,7 +555,7 @@ echo "--------------------------------------------------"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 echo "[2/9] Deleting Consumer Groups ($TIMESTAMP)"
 $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "group_" --start-idx 1 --count $MAX_CAR_CNT $VERBOSE_TAG
-$COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --start-idx 1 --count 4 $VERBOSE_TAG
+$COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --start-idx 1 --count $SERVICE_CNT $VERBOSE_TAG
 echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -582,7 +582,7 @@ for (( step=0; step<$NUM_STEPS; step++ )); do
     CUR_CAR_NUM=$((STEP_CARS[$step] + 1))
     C_START_IDX=$((PREV_CAR_CNT))
     if [ $step -eq 0 ]; then
-        C_START_IDX=5
+        C_START_IDX=$((SERVICE_CNT + 1))
     else
         sleep $STEP_INTERVAL
     fi
@@ -624,7 +624,7 @@ echo "--------------------------------------------------"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 echo "[8/9] Deleting Consumer Groups ($TIMESTAMP)"
 $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "group_" --start-idx 1 --count $MAX_CAR_CNT $VERBOSE_TAG
-$COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --start-idx 1 --count 4 $VERBOSE_TAG
+$COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --start-idx 1 --count $SERVICE_CNT $VERBOSE_TAG
 echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
