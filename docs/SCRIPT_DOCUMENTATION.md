@@ -24,6 +24,7 @@ The following options are common to both `static_v2x_expr.sh` and `dynamic_v2x_e
 | `--config <path>` | - | Path to a configuration file containing `KEY="VALUE"` pairs. | `""` |
 | `--kafka-broker <host:port>` | `KAFKA_BROKER` | Address of the Kafka broker. | `127.0.0.1:9092` |
 | `--mqtt-broker <host:port>` | `MQTT_BROKER` | Address of the MQTT broker. | `127.0.0.1:1883` |
+| `--kafka-bin-path <path>` | `KAFKA_BIN_PATH` | Path to Kafka binary directory (containing `kafka-consumer-groups.sh`). | `./kafka/bin` |
 | `--common-script-root <path>`| `COMMON_SCRIPT_ROOT` | Root directory where common helper scripts are located. | `.` |
 | `--terminate-timeout <sec>` | `TERMINATE_TIMEOUT` | Timeout in seconds to wait before force-killing background processes. | `60` |
 | `-v`, `--verbose` | `VERBOSE` | Enable verbose output. | `0` |

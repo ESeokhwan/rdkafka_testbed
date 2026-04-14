@@ -9,6 +9,7 @@
 KAFKA_BROKER="127.0.0.1:9092"
 MQTT_BROKER="127.0.0.1:1883"
 
+KAFKA_BIN_PATH="kafka/bin"
 COMMON_SCRIPT_ROOT="."
 
 REMOTE_USER="user"
@@ -56,7 +57,7 @@ CONFIG_FILE=""
 
 # --- Argument Parsing ---
 TEMP=$(getopt -o d:vh --longoptions \
-    "config:, verbose, help, kafka-broker:, mqtt-broker:, common-script-root:, \
+    "config:, verbose, help, kafka-broker:, mqtt-broker:, kafka-bin-path:, common-script-root:, \
     connector-host:, connector-root:, connector-out:, connector-temp:, connector-exec:, \
     load-consumer-host:, load-consumer-root:, load-consumer-out:, load-consumer-temp:, \
     load-consumer-exec:, measure-consumer-host:, measure-consumer-root:, measure-consumer-out:,\
@@ -73,6 +74,7 @@ eval set -- "$TEMP"
 # Temporary variables to store command-line arguments
 CL_KAFKA_BROKER=""
 CL_MQTT_BROKER=""
+CL_KAFKA_BIN_PATH=""
 CL_COMMON_SCRIPT_ROOT=""
 CL_CONNECTOR_HOST=""
 CL_CONNECTOR_ROOT=""
@@ -110,6 +112,7 @@ while true ; do
         --config) CONFIG_FILE="$2" ; shift 2 ;;
         --kafka-broker) CL_KAFKA_BROKER="$2" ; shift 2;;
         --mqtt-broker) CL_MQTT_BROKER="$2" ; shift 2 ;;
+        --kafka-bin-path) CL_KAFKA_BIN_PATH="$2" ; shift 2 ;;
         --common-script-root) CL_COMMON_SCRIPT_ROOT="$2" ; shift 2 ;;
         --connector-host) CL_CONNECTOR_HOST="$2" ; shift 2 ;;
         --connector-root) CL_CONNECTOR_ROOT="$2" ; shift 2 ;;
@@ -157,6 +160,7 @@ if [ "$HELP" -eq 1 ]; then
     echo "      --config <path>                      Path to a configuration file. (e.g., key=\"value\" pairs)"
     echo "      --broker <host:port>                 Kafka broker address. (Default: 127.0.0.1:9092)"
     echo "      --mqtt-broker <host:port>            MQTT broker address. (Default: 127.0.0.1:1883)"
+    echo "      --kafka-bin-path <path>              Path to Kafka binary directory. (Default: ./kafka/bin)"
     echo "      --common-script-root <path>          Root directory where common script are located. (Default: .)"
     echo "      --connector-host <user@host>         Remote host for Connector execution. (Default: empty string for local)"
     echo "      --connector-root <path>              Root directory on remote host where Connector is located. (Default: ./connector)"
@@ -215,6 +219,9 @@ if [ -n "$CL_KAFKA_BROKER" ]; then
 fi
 if [ -n "$CL_MQTT_BROKER" ]; then
     MQTT_BROKER="$CL_MQTT_BROKER"
+fi
+if [ -n "$CL_KAFKA_BIN_PATH" ]; then
+    KAFKA_BIN_PATH="$CL_KAFKA_BIN_PATH"
 fi
 if [ -n "$CL_COMMON_SCRIPT_ROOT" ]; then
     COMMON_SCRIPT_ROOT="$CL_COMMON_SCRIPT_ROOT"
@@ -350,6 +357,7 @@ if [ "$VERBOSE" -eq 1 ]; then
     echo "--- Script Configuration ---"
     echo "Kafka Broker:           $KAFKA_BROKER"
     echo "MQTT Broker:            $MQTT_BROKER"
+    echo "Kafka Bin Path:         $KAFKA_BIN_PATH"
     echo "Common Script Root:     $COMMON_SCRIPT_ROOT"
     echo "Connector Host:         $CONNECTOR_HOST"
     echo "Connector Root:         $CONNECTOR_ROOT"
@@ -559,8 +567,8 @@ echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 echo "[2/9] Deleting Consumer Groups ($TIMESTAMP)"
-$COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "group_" --count $MAX_CAR_CNT $VERBOSE_TAG
-$COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --count $SERVICE_CNT $VERBOSE_TAG
+$COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --kafka-bin-path $KAFKA_BIN_PATH --broker $KAFKA_BROKER --prefix "group_" --count $MAX_CAR_CNT $VERBOSE_TAG
+$COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --kafka-bin-path $KAFKA_BIN_PATH --broker $KAFKA_BROKER --prefix "r_group_" --count $SERVICE_CNT $VERBOSE_TAG
 echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -628,8 +636,8 @@ echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 echo "[8/9] Deleting Consumer Groups ($TIMESTAMP)"
-$COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "group_" --count $MAX_CAR_CNT $VERBOSE_TAG
-$COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --count $SERVICE_CNT $VERBOSE_TAG
+$COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --kafka-bin-path $KAFKA_BIN_PATH --broker $KAFKA_BROKER --prefix "group_" --count $MAX_CAR_CNT $VERBOSE_TAG
+$COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --kafka-bin-path $KAFKA_BIN_PATH --broker $KAFKA_BROKER --prefix "r_group_" --count $SERVICE_CNT $VERBOSE_TAG
 echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
