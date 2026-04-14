@@ -16,54 +16,72 @@ It is recommended to use a configuration file for fixed settings that do not cha
 
 ## Common Configuration Options
 
-The following options are common to both `static_v2x_expr.sh` and `dynamic_v2x_expr.sh`.
+The following options are common to both `static_v2x_expr.sh` and `dynamic_v2x_expr.sh` (and their `_light` variants).
 
+### Broker and Script Settings
 | Option | Config Key | Description | Default |
 |---|---|---|---|
 | `--config <path>` | - | Path to a configuration file containing `KEY="VALUE"` pairs. | `""` |
 | `--kafka-broker <host:port>` | `KAFKA_BROKER` | Address of the Kafka broker. | `127.0.0.1:9092` |
 | `--mqtt-broker <host:port>` | `MQTT_BROKER` | Address of the MQTT broker. | `127.0.0.1:1883` |
-| `--common-script-root <path>`| `COMMON_SCRIPT_ROOT` | Root directory where common helper scripts (`delete_consumer_group.sh`, etc.) are located. | `.` |
-| `--connector-host <user@host>` | `CONNECTOR_HOST` | Remote host (`user@ip`) for executing the Connector application. If empty, runs locally. | `""` |
-| `--connector-root <path>` | `CONNECTOR_ROOT` | Root directory on the remote/local host where the Connector application is located. | `./connector` |
-| `--connector-out <path>` | `CONNECTOR_OUT` | Output directory for Connector logs. | `{connector-root}/out` |
-| `--connector-temp <path>` | `CONNECTOR_TEMP` | Temporary directory for Connector files (e.g., PID files). | `{connector-root}/temp` |
+| `--common-script-root <path>`| `COMMON_SCRIPT_ROOT` | Root directory where common helper scripts are located. | `.` |
+| `--terminate-timeout <sec>` | `TERMINATE_TIMEOUT` | Timeout in seconds to wait before force-killing background processes. | `60` |
+| `-v`, `--verbose` | `VERBOSE` | Enable verbose output. | `0` |
+
+### Connector Settings
+| Option | Config Key | Description | Default |
+|---|---|---|---|
+| `--connector-host <user@host>` | `CONNECTOR_HOST` | Remote host for executing the Connector. | `""` |
+| `--connector-root <path>` | `CONNECTOR_ROOT` | Root directory where the Connector is located. | `./connector` |
 | `--connector-exec <path>` | `CONNECTOR_EXEC` | Path to the Connector executable. | `{connector-root}/bin/v2x_expr_mqtt_kafka_connector` |
-| `--r-client-host <user@host>`| `R_CLIENT_HOST` | Remote host (`user@ip`) for executing the Metric Consumer clients. If empty, runs locally. | `""` |
-| `--r-client-root <path>` | `R_CLIENT_ROOT` | Root directory on the remote/local host where the remote client applications are located. | `client` |
-| `--r-client-out <path>` | `R_CLIENT_OUT` | Output directory for remote client logs. | `{r-client-root}/out` |
-| `--r-client-temp <path>` | `R_CLIENT_TEMP` | Temporary directory for remote client files (e.g., PID files). | `{r-client-root}/temp` |
-| `--r-consumer-exec <name>` | `R_CONSUMER_EXEC` | Executable name for the Metric Consumer (remote). | `{r-client-root}/bin/v2x_expr_consumer` |
-| `--client-root <path>` | `CLIENT_ROOT` | Root directory where local client applications are located. | `./client` |
-| `--client-out <path>` | `CLIENT_OUT` | Output directory for local client logs. | `{client-root}/out` |
-| `--client-temp <path>` | `CLIENT_TEMP` | Temporary directory for local client files (e.g., PID files). | `{client-root}/temp` |
-| `--consumer-exec <path>` | `CONSUMER_EXEC` | Path to the Stress Consumer executable (local). | `{client-root}/bin/v2x_expr_consumer` |
-| `--producer-exec <path>` | `PRODUCER_EXEC` | Path to the Producer executable (local). | `{client-root}/bin/v2x_expr_mqtt_producer` |
-| `--terminate-timeout <sec>` | `TERMINATE_TIMEOUT` | Timeout in seconds to wait before force-killing background processes during cleanup. | `60` |
-| `--interval-noise-rate <f>` | `INTERVAL_NOISE_RATE` | Standard deviation of noise to add to the producer's message interval, as a rate of the interval. | `0.0` |
-| `--monitoring-epoch-size <ms>` | `MONITORING_EPOCH_SIZE` | Epoch size in milli seconds of calculating throughput, reliability, and more. | `1000.0` |
-| `-v`, `--verbose` | `VERBOSE` | Enable verbose output, printing all configuration values and script actions. | `0` (off) |
-| `-h`, `--help` | `HELP` | Display the help message for the script and exit. | N/A |
 
-## `mqtt_static_v2x_expr.sh`
-
-This script runs the static V2X experiment. It iterates through a list of fixed client counts (`--num-car`), running a complete test for each count for a specified duration.
-
-### Script-Specific Options
-
+### Load Consumer Settings (Load Generation)
 | Option | Config Key | Description | Default |
 |---|---|---|---|
-| `-d`, `--duration <sec>` | `DURATION` | The duration in seconds for each individual test run. | `100` |
-| `--num-car <n1,n2,...>` | `NUM_CAR` | A comma-separated string of client (car) counts to test. The script will perform a full run for each number in the list. | `(10)` |
+| `--load-consumer-host <host>` | `LOAD_CONSUMER_HOST` | Remote host for Load Consumers. | `""` |
+| `--load-consumer-root <path>` | `LOAD_CONSUMER_ROOT` | Root directory for Load Consumers. | `./client` |
+| `--load-consumer-exec <path>` | `LOAD_CONSUMER_EXEC` | Path to the Load Consumer executable. | `{load-consumer-root}/bin/v2x_expr_consumer` |
 
-## `dynamic_v2x_expr.sh`
-
-This script (named `dynamic_v2x_expr.sh` in the filesystem) runs the dynamic V2X experiment. It simulates a changing number of clients over time by incrementally scaling the number of producers and consumers up to a maximum value and then scaling them back down.
-
-### Script-Specific Options
-
+### Measurement Consumer Settings (Metric Gathering)
 | Option | Config Key | Description | Default |
 |---|---|---|---|
-| `--step-cars <n1,n2,...>` | `STEP_CARS` | A comma-separated string of total client counts for each scaling step. The load will increase to match these numbers sequentially. | `(10,20,30,40,50,60,70,80,90,100,110,120)` |
-| `--step-interval <sec>` | `STEP_INTERVAL`| The interval in seconds to wait between each scaling step (both up and down). | `20` |
-| `--final-hold <sec>` | `FINAL_HOLD` | The duration in seconds to hold the test at the peak client count before starting to scale down. | `20` |
+| `--measure-consumer-host <host>`| `MEASURE_CONSUMER_HOST`| Remote host for Measurement Consumers. | `""` |
+| `--measure-consumer-root <path>`| `MEASURE_CONSUMER_ROOT`| Root directory for Measurement Consumers. | `./client` |
+| `--measure-consumer-exec <path>`| `MEASURE_CONSUMER_EXEC`| Path to the Measurement Consumer executable. | `{measure-consumer-root}/bin/v2x_expr_consumer` |
+
+### Producer Settings
+| Option | Config Key | Description | Default |
+|---|---|---|---|
+| `--producer-host <host>` | `PRODUCER_HOST` | Remote host for Producers. | `""` |
+| `--producer-root <path>` | `PRODUCER_ROOT` | Root directory for Producers. | `./client` |
+| `--producer-exec <path>` | `PRODUCER_EXEC` | Path to the Producer executable. | `{producer-root}/bin/v2x_expr_mqtt_producer` |
+
+### Experiment Behavior Options
+| Option | Config Key | Description | Default |
+|---|---|---|---|
+| `--interval-noise-rate <f>` | `INTERVAL_NOISE_RATE` | Std. dev. of noise for producer interval (Non-light scripts). | `0.0` |
+| `--producer-wakeup-interval <ms>`| `PRODUCER_WAKEUP_INTERVAL`| Wakeup interval for light producer (Light scripts only). | `5` |
+| `--producer-spread-time <ms>`| `PRODUCER_SPREAD_TIME`| Total time to spread producer starts. | `100` |
+| `--producer-spread-interval <ms>`| `PRODUCER_SPREAD_INTERVAL`| Interval between producer starts. | `5` |
+| `--monitoring-epoch-size <ms>` | `MONITORING_EPOCH_SIZE` | Epoch size for calculating statistics. | `1000.0` |
+
+## `static_v2x_expr.sh` / `static_v2x_expr_light.sh`
+
+These scripts run the static V2X experiment. They iterate through a list of fixed client counts (`--num-car`), running a complete test for each count.
+
+### Script-Specific Options
+| Option | Config Key | Description | Default |
+|---|---|---|---|
+| `-d`, `--duration <sec>` | `DURATION` | The duration in seconds for each test run. | `100` |
+| `--num-car <n1,n2,...>` | `NUM_CAR` | A comma-separated list of car counts to test. | `(10)` |
+
+## `dynamic_v2x_expr.sh` / `dynamic_v2x_expr_light.sh`
+
+These scripts run the dynamic V2X experiment, simulating scaling up and down.
+
+### Script-Specific Options
+| Option | Config Key | Description | Default |
+|---|---|---|---|
+| `--step-cars <n1,n2,...>` | `STEP_CARS` | A comma-separated list of car counts for scaling steps. | `(10,20...120)` |
+| `--step-interval <sec>` | `STEP_INTERVAL`| Interval between scaling steps. | `20` |
+| `--final-hold <sec>` | `FINAL_HOLD` | Duration to hold at peak load. | `20` |

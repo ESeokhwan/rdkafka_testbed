@@ -49,6 +49,7 @@ struct ConsumerThreadArg {
     string broker;
     string group_id;
     string client_id;
+    string service_name;
 
     vector<string> topics;
 
@@ -146,6 +147,8 @@ int main(int argc, char *argv[]) {
         {"S10Hz-Sensor", 100},
         {"S30Hz", 25},
         {"S50Hz", 20},
+        {"S10Hz-Info-for-rsu", 100},
+        {"S50Hz-for-rsu", 20},
     };
 
     shared_ptr<moniq::MonitorQueue> monitor_queue = make_shared<moniq::MonitorQueue>();
@@ -183,6 +186,7 @@ void V2xExprConsumerApp::init_clients() {
         consumer_thread_args[i].broker = args.broker;
         consumer_thread_args[i].group_id = args.group_prefix + to_string(cur_idx);
         consumer_thread_args[i].client_id = args.group_prefix + to_string(cur_idx);
+        consumer_thread_args[i].service_name = service_args[assigned_idx[i]].name;
         consumer_thread_args[i].topics.push_back(args.topic_prefix + service_args[assigned_idx[i]].name);
         consumer_thread_args[i].start_signal = &start_signal;
         consumer_thread_args[i].end_flag = &end_flag;
@@ -279,14 +283,16 @@ void consume_run(struct ConsumerThreadArg *arg) {
         if (msg == nullptr) continue;
         std::string plain_msg = std::string(static_cast<const char*>(msg->payload()));
         RdKafka::MessageTimestamp ts = msg->timestamp();
+        int64_t responded_at = ts.timestamp;
         delete msg;
 
         if (arg->log_disabled) continue;
+        if (arg->service_name.find("for-rsu") != string::npos) responded_at -= 3;
         arg->monitor_queue->enqueue(make_unique<monitor::StatSumMonitorLog>(
             arg->message_adaptor.get(),
             plain_msg,
             "Responded",
-            ts.timestamp
+            responded_at
         ));
         arg->writer->notify_if_needed();
     }

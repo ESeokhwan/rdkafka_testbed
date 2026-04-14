@@ -57,6 +57,8 @@ int main(int argc, char *argv[]) {
         "S30Hz",
         "S10Hz-Info",
         "S10Hz-Sensor",
+        "S10Hz-Info-for-rsu",
+        "S50Hz-for-rsu",
     };
 
     for (const string &service_name: service_names) {
