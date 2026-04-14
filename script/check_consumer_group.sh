@@ -121,6 +121,10 @@ fi
 echo "[CG_CHECKER] Fetching active consumer groups..."
 EXISTING_GROUPS=$($KAFKA_BIN_PATH/kafka-consumer-groups.sh --bootstrap-server $BROKER --list 2>&1)
 
+if [ $VERBOSE -eq 1 ]; then
+    echo "$EXISTING_GROUPS"
+fi
+
 ALL_CONNECTED=1
 for ((i=START_IDX; i<START_IDX+COUNT; ++i)); do
     group="$PREFIX$i"
