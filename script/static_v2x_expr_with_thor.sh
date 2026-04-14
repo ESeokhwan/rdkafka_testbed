@@ -9,6 +9,7 @@
 KAFKA_BROKER="127.0.0.1:9092"
 MQTT_BROKER="127.0.0.1:1883"
 
+KAFKA_BIN_PATH="kafka/bin"
 COMMON_SCRIPT_ROOT="."
 
 REMOTE_USER="user"
@@ -25,12 +26,14 @@ LOAD_CONSUMER_ROOT="client"
 LOAD_CONSUMER_OUT=""
 LOAD_CONSUMER_TEMP=""
 LOAD_CONSUMER_EXEC=""
+LOAD_CONSUMER_POLL_TIMEOUT=100
 
 MEASURE_CONSUMER_HOST=""
 MEASURE_CONSUMER_ROOT="client"
 MEASURE_CONSUMER_OUT=""
 MEASURE_CONSUMER_TEMP=""
 MEASURE_CONSUMER_EXEC=""
+MEASURE_CONSUMER_POLL_TIMEOUT=0
 
 PRODUCER_HOST=""
 PRODUCER_ROOT="client"
@@ -56,11 +59,12 @@ CONFIG_FILE=""
 
 # --- Argument Parsing ---
 TEMP=$(getopt -o d:vh --longoptions \
-    "config:, verbose, help, kafka-broker:, mqtt-broker:, common-script-root:, \
+    "config:, verbose, help, kafka-broker:, mqtt-broker:, kafka-bin-path:, common-script-root:, \
     connector-host:, connector-root:, connector-out:, connector-temp:, connector-exec:, \
     load-consumer-host:, load-consumer-root:, load-consumer-out:, load-consumer-temp:, \
-    load-consumer-exec:, measure-consumer-host:, measure-consumer-root:, measure-consumer-out:,\
-    measure-consumer-temp:, measure-consumer-exec:, producer-host:, producer-root:, producer-out:, \
+    load-consumer-exec:, load-consumer-poll-timeout:, measure-consumer-host:, measure-consumer-root:, \
+    measure-consumer-out:, measure-consumer-temp:, measure-consumer-exec:, measure-consumer-poll-timeout:, \
+    producer-host:, producer-root:, producer-out:, \
     producer-temp:, producer-exec:, duration:, num-car:, interval-noise-rate:, \
     producer-spread-time:, producer-spread-interval:, monitoring-epoch-size:, terminate-timeout:" \
     -n 'myscript' -- "$@" \
@@ -72,6 +76,7 @@ eval set -- "$TEMP"
 # Temporary variables to store command-line arguments
 CL_KAFKA_BROKER=""
 CL_MQTT_BROKER=""
+CL_KAFKA_BIN_PATH=""
 CL_COMMON_SCRIPT_ROOT=""
 CL_CONNECTOR_HOST=""
 CL_CONNECTOR_ROOT=""
@@ -83,11 +88,13 @@ CL_LOAD_CONSUMER_ROOT=""
 CL_LOAD_CONSUMER_OUT=""
 CL_LOAD_CONSUMER_TEMP=""
 CL_LOAD_CONSUMER_EXEC=""
+CL_LOAD_CONSUMER_POLL_TIMEOUT=""
 CL_MEASURE_CONSUMER_HOST=""
 CL_MEASURE_CONSUMER_ROOT=""
 CL_MEASURE_CONSUMER_OUT=""
 CL_MEASURE_CONSUMER_TEMP=""
 CL_MEASURE_CONSUMER_EXEC=""
+CL_MEASURE_CONSUMER_POLL_TIMEOUT=""
 CL_PRODUCER_HOST=""
 CL_PRODUCER_ROOT=""
 CL_PRODUCER_OUT=""
@@ -108,6 +115,7 @@ while true ; do
         --config) CONFIG_FILE="$2" ; shift 2 ;;
         --kafka-broker) CL_KAFKA_BROKER="$2" ; shift 2;;
         --mqtt-broker) CL_MQTT_BROKER="$2" ; shift 2 ;;
+        --kafka-bin-path) CL_KAFKA_BIN_PATH="$2" ; shift 2 ;;
         --common-script-root) CL_COMMON_SCRIPT_ROOT="$2" ; shift 2 ;;
         --connector-host) CL_CONNECTOR_HOST="$2" ; shift 2 ;;
         --connector-root) CL_CONNECTOR_ROOT="$2" ; shift 2 ;;
@@ -119,11 +127,13 @@ while true ; do
         --load-consumer-out) CL_LOAD_CONSUMER_OUT="$2" ; shift 2 ;;
         --load-consumer-temp) CL_LOAD_CONSUMER_TEMP="$2" ; shift 2 ;;
         --load-consumer-exec) CL_LOAD_CONSUMER_EXEC="$2" ; shift 2 ;;
+        --load-consumer-poll-timeout) CL_LOAD_CONSUMER_POLL_TIMEOUT="$2" ; shift 2 ;;
         --measure-consumer-host) CL_MEASURE_CONSUMER_HOST="$2" ; shift 2 ;;
         --measure-consumer-root) CL_MEASURE_CONSUMER_ROOT="$2" ; shift 2 ;;
         --measure-consumer-out) CL_MEASURE_CONSUMER_OUT="$2" ; shift 2 ;;
         --measure-consumer-temp) CL_MEASURE_CONSUMER_TEMP="$2" ; shift 2 ;;
         --measure-consumer-exec) CL_MEASURE_CONSUMER_EXEC="$2" ; shift 2 ;;
+        --measure-consumer-poll-timeout) CL_MEASURE_CONSUMER_POLL_TIMEOUT="$2" ; shift 2 ;;
         --producer-host) CL_PRODUCER_HOST="$2" ; shift 2 ;;
         --producer-root) CL_PRODUCER_ROOT="$2" ; shift 2 ;;
         --producer-out) CL_PRODUCER_OUT="$2" ; shift 2 ;;
@@ -147,10 +157,14 @@ done
 if [ "$HELP" -eq 1 ]; then
     echo "Usage: $(basename "$0") [OPTIONS] [POSITIONAL_ARG1] [POSITIONAL_ARG2...]"
     echo ""
+    echo "This script orchestrates a static V2X performance experiment with Thor."
+    echo "It iterates through a list of fixed client counts, running a complete test iteration for each."
+    echo ""
     echo "Options:"
     echo "      --config <path>                      Path to a configuration file. (e.g., key=\"value\" pairs)"
     echo "      --broker <host:port>                 Kafka broker address. (Default: 127.0.0.1:9092)"
     echo "      --mqtt-broker <host:port>            MQTT broker address. (Default: 127.0.0.1:1883)"
+    echo "      --kafka-bin-path <path>              Path to Kafka binary directory. (Default: ./kafka/bin)"
     echo "      --common-script-root <path>          Root directory where common script are located. (Default: .)"
     echo "      --connector-host <user@host>         Remote host for Connector execution. (Default: empty string for local)"
     echo "      --connector-root <path>              Root directory on remote host where Connector is located. (Default: ./connector)"
@@ -162,11 +176,13 @@ if [ "$HELP" -eq 1 ]; then
     echo "      --load-consumer-out <path>           Output root directory for Load Consumer logs. (Default: {load-consumer-root}/out)"
     echo "      --load-consumer-temp <path>          Temporary root directory for Load Consumer files. (Default: {load-consumer-root}/temp)"
     echo "      --load-consumer-exec <name>          Executable name for Load Consumer. (Default: {load-consumer-root}/bin/v2x_expr_consumer)"
+    echo "      --load-consumer-poll-timeout <ms>    Poll timeout in milliseconds for Load Consumer. (Default: 100)"
     echo "      --measure-consumer-host <user@host>  Remote host for Measurement Consumers execution. (Default: empty string for local)"
     echo "      --measure-consumer-root <path>       Root directory of Measurement Consumers (Default: client)"
     echo "      --measure-consumer-out <path>        Output root directory for Measurement Consumer logs. (Default: {measure-consumer-root}/out)"
     echo "      --measure-consumer-temp <path>       Temporary root directory for Measurement Consumer files. (Default: {measure-consumer-root}/temp)"
     echo "      --measure-consumer-exec <name>       Executable name for Measurement Consumer. (Default: {measure-consumer-root}/bin/v2x_expr_consumer)"
+    echo "      --measure-consumer-poll-timeout <ms> Poll timeout in milliseconds for Measure Consumer. (Default: 0)"
     echo "      --producer-host <user@host>          Remote host for Producer execution. (Default: empty string for local)"
     echo "      --producer-root <path>               Root directory of Producer (Default: client)"
     echo "      --producer-out <path>                Output root directory for Producer logs. (Default: {producer-root}/out)"
@@ -209,6 +225,9 @@ fi
 if [ -n "$CL_MQTT_BROKER" ]; then
     MQTT_BROKER="$CL_MQTT_BROKER"
 fi
+if [ -n "$CL_KAFKA_BIN_PATH" ]; then
+    KAFKA_BIN_PATH="$CL_KAFKA_BIN_PATH"
+fi
 if [ -n "$CL_COMMON_SCRIPT_ROOT" ]; then
     COMMON_SCRIPT_ROOT="$CL_COMMON_SCRIPT_ROOT"
 fi
@@ -242,6 +261,9 @@ fi
 if [ -n "$CL_LOAD_CONSUMER_EXEC" ]; then
     LOAD_CONSUMER_EXEC="$CL_LOAD_CONSUMER_EXEC"
 fi
+if [ -n "$CL_LOAD_CONSUMER_POLL_TIMEOUT" ]; then
+    LOAD_CONSUMER_POLL_TIMEOUT="$CL_LOAD_CONSUMER_POLL_TIMEOUT"
+fi
 if [ -n "$CL_MEASURE_CONSUMER_HOST" ]; then
     MEASURE_CONSUMER_HOST="$CL_MEASURE_CONSUMER_HOST"
 fi
@@ -256,6 +278,9 @@ if [ -n "$CL_MEASURE_CONSUMER_TEMP" ]; then
 fi
 if [ -n "$CL_MEASURE_CONSUMER_EXEC" ]; then
     MEASURE_CONSUMER_EXEC="$CL_MEASURE_CONSUMER_EXEC"
+fi
+if [ -n "$CL_MEASURE_CONSUMER_POLL_TIMEOUT" ]; then
+    MEASURE_CONSUMER_POLL_TIMEOUT="$CL_MEASURE_CONSUMER_POLL_TIMEOUT"
 fi
 if [ -n "$CL_PRODUCER_HOST" ]; then
     PRODUCER_HOST="$CL_PRODUCER_HOST"
@@ -340,6 +365,7 @@ if [ "$VERBOSE" -eq 1 ]; then
     echo "--- Script Configuration ---"
     echo "Kafka Broker:           $KAFKA_BROKER"
     echo "MQTT Broker:            $MQTT_BROKER"
+    echo "Kafka Bin Path:         $KAFKA_BIN_PATH"
     echo "Common Script Root:     $COMMON_SCRIPT_ROOT"
     echo "Connector Host:         $CONNECTOR_HOST"
     echo "Connector Root:         $CONNECTOR_ROOT"
@@ -351,11 +377,13 @@ if [ "$VERBOSE" -eq 1 ]; then
     echo "Load Consumer Out:      $LOAD_CONSUMER_OUT"
     echo "Load Consumer Temp:     $LOAD_CONSUMER_TEMP"
     echo "Load Consumer Exec:     $LOAD_CONSUMER_EXEC"
+    echo "Load Consumer Poll Timeout: $LOAD_CONSUMER_POLL_TIMEOUT"
     echo "Measure Consumer Host:  $MEASURE_CONSUMER_HOST"
     echo "Measure Consumer Root:  $MEASURE_CONSUMER_ROOT"
     echo "Measure Consumer Out:   $MEASURE_CONSUMER_OUT"
     echo "Measure Consumer Temp:  $MEASURE_CONSUMER_TEMP"
     echo "Measure Consumer Exec:  $MEASURE_CONSUMER_EXEC"
+    echo "Measure Consumer Poll Timeout: $MEASURE_CONSUMER_POLL_TIMEOUT"
     echo "Producer Host:          $PRODUCER_HOST"
     echo "Producer Root:          $PRODUCER_ROOT"
     echo "Producer Out:           $PRODUCER_OUT"
@@ -453,18 +481,19 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     echo "[2/9] Deleting Consumer Groups ($TIMESTAMP)"
-    $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "group_" --start-idx 1 --count $CURRENT_CAR_NUM $VERBOSE_TAG
-    $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --start-idx 1 --count $SERVICE_CNT $VERBOSE_TAG
+    $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --kafka-bin-path $KAFKA_BIN_PATH --broker $KAFKA_BROKER --prefix "group_" --start-idx 1 --count $CURRENT_CAR_NUM $VERBOSE_TAG
+    $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --kafka-bin-path $KAFKA_BIN_PATH --broker $KAFKA_BROKER --prefix "r_group_" --start-idx 1 --count $SERVICE_CNT $VERBOSE_TAG
     echo "--------------------------------------------------"
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     echo "[3/9] Executing Consumer for measurement ($TIMESTAMP)"
-    MEASURE_CONSUMER_ID="MeasuerConsumer_${CURRENT_CAR_NUM}"
+    MEASURE_CONSUMER_ID="MeasureConsumer_${CURRENT_CAR_NUM}"
     MEASURE_CONSUMER_COMMAND="$MEASURE_CONSUMER_ROOT/script/run-on-bg.sh --id $MEASURE_CONSUMER_ID \
         --out-dir $MEASURE_CONSUMER_OUT --temp-dir $MEASURE_CONSUMER_TEMP $VERBOSE_TAG \
         --exec-path $MEASURE_CONSUMER_EXEC -- \
             --broker $KAFKA_BROKER --group-prefix r_group_ \
             --client-cnt -1 --start-idx 1 --running-time $INF_DURATION \
+            --poll-timeout $MEASURE_CONSUMER_POLL_TIMEOUT \
             --outdir $MEASURE_CONSUMER_OUT --out-prefix \"${CURRENT_CAR_NUM}C_${TIMESTAMP}\" \
             --monitoring-epoch-size $MONITORING_EPOCH_SIZE $VERBOSE_TAG"
     if [ -z "$MEASURE_CONSUMER_HOST" ]; then
@@ -482,6 +511,7 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
         --exec-path $LOAD_CONSUMER_EXEC -- \
             --broker $KAFKA_BROKER --group-prefix group_ \
             --client-cnt $CURRENT_CAR_NUM --start-idx 1 --running-time $INF_DURATION \
+            --poll-timeout $LOAD_CONSUMER_POLL_TIMEOUT \
             --outdir $LOAD_CONSUMER_OUT --out-prefix \"${CURRENT_CAR_NUM}C_\" --no-log \
             --monitoring-epoch-size $MONITORING_EPOCH_SIZE $VERBOSE_TAG"
     if [ -z "$LOAD_CONSUMER_HOST" ]; then
@@ -498,8 +528,8 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     echo "[5/9] Checking Consumer Groups connection ($TIMESTAMP)"
-    $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "group_" --start-idx 1 --count $CURRENT_CAR_NUM $VERBOSE_TAG
-    $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --start-idx 1 --count $SERVICE_CNT $VERBOSE_TAG
+    $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --kafka-bin-path $KAFKA_BIN_PATH --broker $KAFKA_BROKER --prefix "group_" --start-idx 1 --count $CURRENT_CAR_NUM $VERBOSE_TAG
+    $COMMON_SCRIPT_ROOT/script/check_consumer_group.sh --kafka-bin-path $KAFKA_BIN_PATH --broker $KAFKA_BROKER --prefix "r_group_" --start-idx 1 --count $SERVICE_CNT $VERBOSE_TAG
     echo "--------------------------------------------------"
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -530,8 +560,8 @@ for CAR_NUM in "${NUM_CAR[@]}"; do
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     echo "[8/9] Deleting Consumer Groups ($TIMESTAMP)"
-    $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "group_" --start-idx 1 --count $CURRENT_CAR_NUM $VERBOSE_TAG
-    $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --config $COMMON_SCRIPT_ROOT/config/common.config --broker $KAFKA_BROKER --prefix "r_group_" --start-idx 1 --count $SERVICE_CNT $VERBOSE_TAG
+    $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --kafka-bin-path $KAFKA_BIN_PATH --broker $KAFKA_BROKER --prefix "group_" --start-idx 1 --count $CURRENT_CAR_NUM $VERBOSE_TAG
+    $COMMON_SCRIPT_ROOT/script/delete_consumer_group.sh --kafka-bin-path $KAFKA_BIN_PATH --broker $KAFKA_BROKER --prefix "r_group_" --start-idx 1 --count $SERVICE_CNT $VERBOSE_TAG
     echo "--------------------------------------------------"
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)

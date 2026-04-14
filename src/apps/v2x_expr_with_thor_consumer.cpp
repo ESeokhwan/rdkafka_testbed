@@ -31,6 +31,7 @@ struct Arguments {
     int client_cnt;
     int start_idx;
     int running_time;
+    int poll_timeout;
 
     bool scrapable;
     bool log_disabled;
@@ -60,6 +61,7 @@ struct ConsumerThreadArg {
     latch *start_signal;
     atomic<bool> *end_flag;
 
+    int poll_timeout;
     bool log_disabled;
     bool read_tagged_only;
     bool verbose;
@@ -134,6 +136,7 @@ int main(int argc, char *argv[]) {
             << "Client Count: " << args.client_cnt << "\n"
             << "Start Index: " << args.start_idx << "\n"
             << "Running Time: " << args.running_time << "\n"
+            << "Poll Timeout: " << args.poll_timeout << "\n"
             << "Start Barrier Delay: " << args.start_barrier_delay << "\n"
             << "Scrapable: " << (args.scrapable ? "on" : "off") << "\n"
             << "No logging: " << (args.log_disabled ? "on" : "off") << "\n"
@@ -191,6 +194,7 @@ void V2xExprConsumerApp::init_clients() {
         consumer_thread_args[i].topics.push_back(args.topic_prefix + service_args[assigned_idx[i]].topic);
         consumer_thread_args[i].start_signal = &start_signal;
         consumer_thread_args[i].end_flag = &end_flag;
+        consumer_thread_args[i].poll_timeout = args.poll_timeout;
         consumer_thread_args[i].verbose = args.verbose;
         consumer_thread_args[i].log_disabled = args.log_disabled;
         consumer_thread_args[i].read_tagged_only = args.read_tagged_only;
@@ -280,7 +284,7 @@ void consume_run(struct ConsumerThreadArg *arg) {
     if (!consumer::subscribe_topics(consumer.get(), arg->topics)) return;
 
     while (!arg->end_flag->load(memory_order_acquire)) {
-        RdKafka::Message *msg = consumer::consume_message(consumer.get(), 0);
+        RdKafka::Message *msg = consumer::consume_message(consumer.get(), arg->poll_timeout);
         if (msg == nullptr) continue;
         std::string plain_msg = std::string(static_cast<const char*>(msg->payload()));
         RdKafka::MessageTimestamp ts = msg->timestamp();
@@ -313,6 +317,7 @@ Arguments parse_arguments(int argc, char** argv) {
     args.client_cnt = 1;
     args.start_idx = 0;
     args.running_time = 10;
+    args.poll_timeout = 0;
     args.start_barrier_delay = 2;
     args.outdir = "";
     args.out_prefix = "";
@@ -330,6 +335,7 @@ Arguments parse_arguments(int argc, char** argv) {
         util::CLIENT_CNT_OPTION,
         util::START_IDX_OPTION,
         util::RUNNING_TIME_OPTION,
+        util::POLL_TIMEOUT_OPTION,
         util::START_BARRIER_DELAY_OPTION,
         util::SCRAPABLE_OPTION,
         util::NO_LOG_OPTION,
@@ -351,6 +357,7 @@ Arguments parse_arguments(int argc, char** argv) {
             case util::CLIENT_CNT_OPTION.get_val(): args.client_cnt = atoi(optarg); break;
             case util::START_IDX_OPTION.get_val(): args.start_idx = atoi(optarg); break;
             case util::RUNNING_TIME_OPTION.get_val(): args.running_time = atoi(optarg); break;
+            case util::POLL_TIMEOUT_OPTION.get_val(): args.poll_timeout = atoi(optarg); break;
             case util::START_BARRIER_DELAY_OPTION.get_val(): args.start_barrier_delay = atoi(optarg); break;
             case util::SCRAPABLE_OPTION.get_val(): args.scrapable = true; break;
             case util::NO_LOG_OPTION.get_val(): args.log_disabled = true; break;
