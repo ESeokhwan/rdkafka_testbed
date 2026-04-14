@@ -27,6 +27,7 @@ To run the consumer:
 | `--client-cnt`          | Number of consumer clients to create.                  | 1            |
 | `--start-idx`           | Starting index for client IDs.                         | 0            |
 | `--running-time`, `-r`  | Total running time for the test in seconds.            | 10           |
+| `--poll-timeout`        | Poll timeout in milliseconds for consuming messages.   | 0            |
 | `--start-barrier-delay` | Delay in seconds before consumers start fetching.      | 2            |
 | `--scrapable`           | Enable scrapable monitoring mode.                      | off          |
 | `--no-log`              | Disable monitoring logging. Turn it on for Load Consumers. | off          |

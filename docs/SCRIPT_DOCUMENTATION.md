@@ -24,6 +24,7 @@ The following options are common to both `static_v2x_expr.sh` and `dynamic_v2x_e
 | `--config <path>` | - | Path to a configuration file containing `KEY="VALUE"` pairs. | `""` |
 | `--kafka-broker <host:port>` | `KAFKA_BROKER` | Address of the Kafka broker. | `127.0.0.1:9092` |
 | `--mqtt-broker <host:port>` | `MQTT_BROKER` | Address of the MQTT broker. | `127.0.0.1:1883` |
+| `--kafka-bin-path <path>` | `KAFKA_BIN_PATH` | Path to Kafka binary directory (containing `kafka-consumer-groups.sh`). | `./kafka/bin` |
 | `--common-script-root <path>`| `COMMON_SCRIPT_ROOT` | Root directory where common helper scripts are located. | `.` |
 | `--terminate-timeout <sec>` | `TERMINATE_TIMEOUT` | Timeout in seconds to wait before force-killing background processes. | `60` |
 | `-v`, `--verbose` | `VERBOSE` | Enable verbose output. | `0` |
@@ -41,6 +42,7 @@ The following options are common to both `static_v2x_expr.sh` and `dynamic_v2x_e
 | `--load-consumer-host <host>` | `LOAD_CONSUMER_HOST` | Remote host for Load Consumers. | `""` |
 | `--load-consumer-root <path>` | `LOAD_CONSUMER_ROOT` | Root directory for Load Consumers. | `./client` |
 | `--load-consumer-exec <path>` | `LOAD_CONSUMER_EXEC` | Path to the Load Consumer executable. | `{load-consumer-root}/bin/v2x_expr_consumer` |
+| `--load-consumer-poll-timeout <ms>` | `LOAD_CONSUMER_POLL_TIMEOUT` | Poll timeout in milliseconds for Load Consumer. | `100` |
 
 ### Measurement Consumer Settings (Metric Gathering)
 | Option | Config Key | Description | Default |
@@ -48,6 +50,7 @@ The following options are common to both `static_v2x_expr.sh` and `dynamic_v2x_e
 | `--measure-consumer-host <host>`| `MEASURE_CONSUMER_HOST`| Remote host for Measurement Consumers. | `""` |
 | `--measure-consumer-root <path>`| `MEASURE_CONSUMER_ROOT`| Root directory for Measurement Consumers. | `./client` |
 | `--measure-consumer-exec <path>`| `MEASURE_CONSUMER_EXEC`| Path to the Measurement Consumer executable. | `{measure-consumer-root}/bin/v2x_expr_consumer` |
+| `--measure-consumer-poll-timeout <ms>` | `MEASURE_CONSUMER_POLL_TIMEOUT` | Poll timeout in milliseconds for Measure Consumer. | `0` |
 
 ### Producer Settings
 | Option | Config Key | Description | Default |

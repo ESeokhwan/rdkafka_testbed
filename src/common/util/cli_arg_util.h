@@ -45,7 +45,8 @@ enum class LongOnlyOptionVals {
     MQTT_BROKER,
     CLIENT_SPREAD_TIME,
     CLIENT_SPREAD_INTERVAL,
-    WAKEUP_INTERVAL
+    WAKEUP_INTERVAL,
+    POLL_TIMEOUT
 };
 
 }
@@ -140,6 +141,8 @@ constexpr OptionWrapper INTERVAL_BTW_TOPIC_OPTION = {"interval-btw-topic", requi
 constexpr OptionWrapper INTERVAL_BTW_TOPIC_NOISE_STDDEV_OPTION = {"interval-btw-topic-noise-stddev", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::INTERVAL_BTW_TOPIC_NOISE_STDDEV), "Interval between topics noise standard deviation"};
 
 constexpr OptionWrapper WAKEUP_INTERVAL_OPTION = {"wakeup-interval", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::WAKEUP_INTERVAL), "Wakeup interval"};
+
+constexpr OptionWrapper POLL_TIMEOUT_OPTION = {"poll-timeout", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::POLL_TIMEOUT), "Poll timeout (ms)"};
 
 constexpr OptionWrapper CLIENT_SPREAD_TIME_OPTION = {"client-spread-time", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::CLIENT_SPREAD_TIME), "Total starting time for spreading (ms)"};
 constexpr OptionWrapper CLIENT_SPREAD_INTERVAL_OPTION = {"client-spread-interval", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::CLIENT_SPREAD_INTERVAL), "Starting time interval between clients for spreading (ms)"};
