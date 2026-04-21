@@ -27,6 +27,8 @@ The following options are common to both `static_v2x_expr.sh` and `dynamic_v2x_e
 | `--kafka-bin-path <path>` | `KAFKA_BIN_PATH` | Path to Kafka binary directory (containing `kafka-consumer-groups.sh`). | `./kafka/bin` |
 | `--common-script-root <path>`| `COMMON_SCRIPT_ROOT` | Root directory where common helper scripts are located. | `.` |
 | `--terminate-timeout <sec>` | `TERMINATE_TIMEOUT` | Timeout in seconds to wait before force-killing background processes. | `60` |
+| `--start-guard-time <sec>` | `START_GUARD_TIME` | Guard time in seconds before starting producer. | `3` |
+| `--end-guard-time <sec>` | `END_GUARD_TIME` | Guard time in seconds before starting producer. | `35` |
 | `-v`, `--verbose` | `VERBOSE` | Enable verbose output. | `0` |
 
 ### Connector Settings
