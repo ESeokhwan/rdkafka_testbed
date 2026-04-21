@@ -142,7 +142,7 @@ int main(int argc, char *argv[]) {
             << "No logging: " << (args.log_disabled ? "on" : "off") << "\n"
             << "Log Sampling: " << (args.read_tagged_only ? "on" : "off") << "\n"
             << "Monitoring Epoch Size: " << args.monitoring_epoch_size << "\n"
-            << "Output Directory: " << args.outdir
+            << "Output Directory: " << args.outdir << "\n"
             << "Output File Prefix: " << args.out_prefix << endl;
     }
 
