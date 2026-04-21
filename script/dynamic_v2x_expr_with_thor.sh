@@ -53,6 +53,9 @@ PRODUCER_SPREAD_INTERVAL=5
 
 MONITORING_EPOCH_SIZE=1000.0
 
+START_GUARD_TIME=3
+END_GUARD_TIME=35
+
 VERBOSE=0
 HELP=0
 CONFIG_FILE=""
@@ -67,7 +70,8 @@ TEMP=$(getopt -o d:vh --longoptions \
     producer-host:, producer-root:, producer-out:, \
     producer-temp:, producer-exec:, step-cars:, step-interval:, final-hold:, \
     interval-noise-rate:, producer-spread-time:, producer-spread-interval:, \
-    monitoring-epoch-size:, terminate-timeout:" \
+    monitoring-epoch-size:, terminate-timeout:, \
+    start-guard-time:, end-guard-time:" \
     -n 'myscript' -- "$@" \
 )
 
@@ -109,6 +113,8 @@ CL_INTERVAL_NOISE_RATE=""
 CL_PRODUCER_SPREAD_TIME=""
 CL_PRODUCER_SPREAD_INTERVAL=""
 CL_MONITORING_EPOCH_SIZE=""
+CL_START_GUARD_TIME=""
+CL_END_GUARD_TIME=""
 CL_VERBOSE=""
 
 # Process arguments and store them in temporary variables
@@ -149,6 +155,8 @@ while true ; do
         --producer-spread-time) CL_PRODUCER_SPREAD_TIME="$2" ; shift 2 ;;
         --producer-spread-interval) CL_PRODUCER_SPREAD_INTERVAL="$2" ; shift 2 ;;
         --monitoring-epoch-size) CL_MONITORING_EPOCH_SIZE="$2" ; shift 2 ;;
+        --start-guard-time) CL_START_GUARD_TIME="$2" ; shift 2 ;;
+        --end-guard-time) CL_END_GUARD_TIME="$2" ; shift 2 ;;
         -v|--verbose) CL_VERBOSE=1 ; shift ;;
         -h|--help) HELP=1 ; shift ;;
         --) shift ; break ;;
@@ -199,6 +207,8 @@ if [ "$HELP" -eq 1 ]; then
     echo "      --producer-spread-time <ms>          Time in milliseconds to spread producer clients during startup. (Default: 100)"
     echo "      --producer-spread-interval <ms>      Interval in milliseconds between each producer client startup. (Default: 5)"
     echo "      --monitoring-epoch-size <f>          Epoch size in milli seconds of calculating throughput, reliability, and more. (Default: 1000.0)"
+    echo "      --start-guard-time <seconds>         Guard time in seconds before starting producer. (Default: 3)"
+    echo "      --end-guard-time <seconds>           Guard time in seconds before terminating consumers. (Default: 35)"
     echo "  -v, --verbose                            Enable verbose output. (Config key: VERBOSE=1)"
     echo "  -h, --help                               Display this help message and exit."
     echo ""
@@ -325,6 +335,12 @@ fi
 if [ -n "$CL_MONITORING_EPOCH_SIZE" ]; then
     MONITORING_EPOCH_SIZE="$CL_MONITORING_EPOCH_SIZE"
 fi
+if [ -n "$CL_START_GUARD_TIME" ]; then
+    START_GUARD_TIME="$CL_START_GUARD_TIME"
+fi
+if [ -n "$CL_END_GUARD_TIME" ]; then
+    END_GUARD_TIME="$CL_END_GUARD_TIME"
+fi
 if [ -n "$CL_VERBOSE" ]; then
     VERBOSE="$CL_VERBOSE"
 fi
@@ -404,6 +420,8 @@ if [ "$VERBOSE" -eq 1 ]; then
     echo "Producer Spread Start Time (ms): $PRODUCER_SPREAD_TIME"
     echo "Producer Spread Interval (ms):   $PRODUCER_SPREAD_INTERVAL"
     echo "Monitoring Epoch Size:  $MONITORING_EPOCH_SIZE"
+    echo "Start Guard Time:       $START_GUARD_TIME"
+    echo "End Guard Time:         $END_GUARD_TIME"
     echo "Verbose Mode:           $VERBOSE"
     echo "--------------------------"
 
@@ -605,6 +623,11 @@ else
 fi
 echo "--------------------------------------------------"
 
+GUARD_TIME=$START_GUARD_TIME
+echo "Waiting for ${GUARD_TIME} seconds before execute producers..."
+sleep $GUARD_TIME
+echo "--------------------------------------------------"
+
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 echo "[4/9] Starting scale up steps ($TIMESTAMP)"
 PREV_CAR_CNT=1
@@ -640,9 +663,9 @@ for (( step=0; step<$NUM_STEPS; step++ )); do
 done
 echo "--------------------------------------------------"
 
-GAURD_TIME=35
-echo "Waiting for ${GAURD_TIME} seconds before terminating consumers..."
-sleep $GAURD_TIME
+GUARD_TIME=$END_GUARD_TIME
+echo "Waiting for ${GUARD_TIME} seconds before terminating consumers..."
+sleep $GUARD_TIME
 echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
