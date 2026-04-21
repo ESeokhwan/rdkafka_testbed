@@ -43,6 +43,9 @@ PRODUCER_EXEC=""
 
 TERMINATE_TIMEOUT=60
 
+START_GUARD_TIME=3
+END_GUARD_TIME=35
+
 STEP_CARS=(10 20 30 40 50 60 70 80 90 100 110 120)
 STEP_INTERVAL=20
 FINAL_HOLD=20
@@ -67,7 +70,7 @@ TEMP=$(getopt -o d:vh --longoptions \
     producer-host:, producer-root:, producer-out:, \
     producer-temp:, producer-exec:, step-cars:, step-interval:, final-hold:, \
     producer-wakeup-interval:, producer-spread-time:, producer-spread-interval:, \
-    monitoring-epoch-size:, terminate-timeout:" \
+    monitoring-epoch-size:, terminate-timeout:, start-guard-time:, end-guard-time:" \
     -n 'myscript' -- "$@" \
 )
 
@@ -325,6 +328,12 @@ fi
 if [ -n "$CL_MONITORING_EPOCH_SIZE" ]; then
     MONITORING_EPOCH_SIZE="$CL_MONITORING_EPOCH_SIZE"
 fi
+if [ -n "$CL_START_GUARD_TIME" ]; then
+    START_GUARD_TIME="$CL_START_GUARD_TIME"
+fi
+if [ -n "$CL_END_GUARD_TIME" ]; then
+    END_GUARD_TIME="$CL_END_GUARD_TIME"
+fi
 if [ -n "$CL_VERBOSE" ]; then
     VERBOSE="$CL_VERBOSE"
 fi
@@ -404,6 +413,8 @@ if [ "$VERBOSE" -eq 1 ]; then
     echo "Producer Spread Start Time (ms): $PRODUCER_SPREAD_TIME"
     echo "Producer Spread Interval (ms):   $PRODUCER_SPREAD_INTERVAL"
     echo "Monitoring Epoch Size:  $MONITORING_EPOCH_SIZE"
+    echo "Start Guard Time:       $START_GUARD_TIME"
+    echo "End Guard Time:         $END_GUARD_TIME"
     echo "Verbose Mode:           $VERBOSE"
     echo "--------------------------"
 
@@ -607,6 +618,11 @@ else
 fi
 echo "--------------------------------------------------"
 
+GUARD_TIME=$START_GUARD_TIME
+echo "Waiting for ${GUARD_TIME} seconds before execute producers..."
+sleep $GUARD_TIME
+echo "--------------------------------------------------"
+
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 echo "[4/9] Starting scale up steps ($TIMESTAMP)"
 PREV_CAR_CNT=0
@@ -642,9 +658,9 @@ for (( step=0; step<$NUM_STEPS; step++ )); do
 done
 echo "--------------------------------------------------"
 
-GAURD_TIME=35
-echo "Waiting for ${GAURD_TIME} seconds before terminating consumers..."
-sleep $GAURD_TIME
+GUARD_TIME=$END_GUARD_TIME
+echo "Waiting for ${GUARD_TIME} seconds before terminating consumers..."
+sleep $GUARD_TIME
 echo "--------------------------------------------------"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
