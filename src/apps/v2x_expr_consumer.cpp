@@ -284,9 +284,9 @@ void consume_run(struct ConsumerThreadArg *arg) {
 
     while (!arg->end_flag->load(memory_order_acquire)) {
         RdKafka::Message *msg = consumer::consume_message(consumer.get(), arg->poll_timeout);
-        int64_t responded_at = util::get_current_timestamp();
         if (msg == nullptr) continue;
         std::string plain_msg = std::string(static_cast<const char*>(msg->payload()));
+        int64_t responded_at = msg->timestamp().timestamp;
         delete msg;
 
         if (arg->log_disabled) continue;
