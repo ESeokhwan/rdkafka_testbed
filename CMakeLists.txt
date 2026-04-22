@@ -31,14 +31,31 @@ if (NOT APPLE)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--disable-new-dtags")
 endif()
 set(CMAKE_SKIP_BUILD_RPATH FALSE)
-set(CMAKE_BUILD_RPATH "${PROJECT_SOURCE_DIR}/librdkafka/install/lib")
+
+# librdkafka configuration
+set(RDKAFKA_BUILD_STATIC ON CACHE BOOL "")
+set(RDKAFKA_BUILD_EXAMPLES OFF CACHE BOOL "")
+set(RDKAFKA_BUILD_TESTS OFF CACHE BOOL "")
+add_subdirectory(librdkafka)
+
+# To support #include <librdkafka/rdkafka.h> and <librdkafka/rdkafkacpp.h>
+# We create a virtual include directory in the build tree with symlinks
+set(LIBRDKAFKA_VIRTUAL_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/include")
+file(MAKE_DIRECTORY "${LIBRDKAFKA_VIRTUAL_INCLUDE_DIR}/librdkafka")
+foreach(header rdkafka.h rdkafka_mock.h)
+    if(NOT EXISTS "${LIBRDKAFKA_VIRTUAL_INCLUDE_DIR}/librdkafka/${header}")
+        file(CREATE_LINK "${CMAKE_CURRENT_SOURCE_DIR}/librdkafka/src/${header}" "${LIBRDKAFKA_VIRTUAL_INCLUDE_DIR}/librdkafka/${header}" SYMBOLIC)
+    endif()
+endforeach()
+foreach(header rdkafkacpp.h)
+    if(NOT EXISTS "${LIBRDKAFKA_VIRTUAL_INCLUDE_DIR}/librdkafka/${header}")
+        file(CREATE_LINK "${CMAKE_CURRENT_SOURCE_DIR}/librdkafka/src-cpp/${header}" "${LIBRDKAFKA_VIRTUAL_INCLUDE_DIR}/librdkafka/${header}" SYMBOLIC)
+    endif()
+endforeach()
 
 include_directories(
-    ${PROJECT_SOURCE_DIR}/librdkafka/install/include
+    ${LIBRDKAFKA_VIRTUAL_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/src/common
-)
-link_directories(
-    ${PROJECT_SOURCE_DIR}/librdkafka/install/lib
 )
 
 file(GLOB_RECURSE COMMON_SOURCES

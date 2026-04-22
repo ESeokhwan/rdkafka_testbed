@@ -561,5 +561,3 @@ config/*
 out/
 temp/
 GEMINI.md
-
-librdkafka/

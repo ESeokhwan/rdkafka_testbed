@@ -4,3 +4,7 @@
 [submodule "libmoniq"]
 	path = libmoniq
 	url = https://github.com/ESeokhwan/libmoniq.git
+[submodule "librdkafka"]
+	path = librdkafka
+	url = https://github.com/ESeokhwan/5G-mocking-librdkafka.git
+	branch = v2.6.3
