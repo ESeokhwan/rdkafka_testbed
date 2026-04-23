@@ -1,6 +1,6 @@
 # Testbed for `Kafka-Boost`
 
-This project is a C++ testbed for `librdkafka` and `mosquitto`, primarily serving as a research platform for the paper `Kafka-Boost: An Adaptive Service Boosting Data Streaming Platform for V2X In Edge`. It is designed for performance testing and experimentation with Kafka producers and consumers, particularly in a V2X (Vehicle-to-Everything) context. It utilizes C++20, CMake for building, and vcpkg for dependency management.
+This project is a C++ testbed for `librdkafka` and `mosquitto`, primarily serving as a research platform for the paper `Kafka-Boost: An Adaptive Service Boosting Data Streaming Platform for V2X In Edge`. It is designed for performance testing and experimentation with Kafka producers and consumers, particularly in a V2X (Vehicle-to-Everything) context. It utilizes a custom version of `librdkafka` that simulates 5G edge network behaviors. The project uses C++20, CMake for building, and vcpkg for dependency management.
 
 ## Prerequisites
 
@@ -15,7 +15,7 @@ This project is a C++ testbed for `librdkafka` and `mosquitto`, primarily servin
 ├── vcpkg.json                           # vcpkg dependencies
 ├── config/                              # Configuration files
 ├── libmoniq/                            # Submodule for monitoring
-├── librdkafka/                          # librdkafka source (manually managed)
+├── librdkafka/                          # Submodule for custom librdkafka (5G edge network simulation)
 ├── script/                              # Scripts
 │   ├── static_v2x_expr.sh               # Script for the experiments corresponding to Figure 9~11
 │   ├── static_v2x_expr_light.sh         # Script for the experiments corresponding to Figure 9~11 with light version producer.
