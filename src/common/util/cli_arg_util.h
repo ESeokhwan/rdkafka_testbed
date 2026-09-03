@@ -109,6 +109,8 @@ constexpr OptionWrapper MQTT_BROKER_OPTION = {"mqtt-broker", required_argument, 
 
 constexpr OptionWrapper PREFIX_OPTION = {"prefix", required_argument, nullptr, 'p', "Prefix for topic, client, and etc."};
 
+constexpr OptionWrapper TOPIC_NAME_OPTION = {"topic-name", required_argument, nullptr, 't', "Name of topic."};
+
 constexpr OptionWrapper GROUP_PREFIX_OPTION = {"group-prefix", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::GROUP_PREFIX), "Prefix for group id"};
 
 constexpr OptionWrapper CLIENT_PREFIX_OPTION = {"client-prefix", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::CLIENT_PREFIX), "Prefix for client id"};
@@ -117,6 +119,7 @@ constexpr OptionWrapper TOPIC_PREFIX_OPTION = {"topic-prefix", required_argument
 
 constexpr OptionWrapper ROUND_CNT_OPTION = {"round-cnt", required_argument, nullptr, 'n', "Number of rounds of each producer and service"};
 constexpr OptionWrapper MSG_CNT_PER_TOPIC_OPTION = {"msg-cnt-per-topic", required_argument, nullptr, 'n', "Number of messages per topic"};
+constexpr OptionWrapper MSG_CNT_PER_CLIENT_OPTION = {"msg-cnt-per-client", required_argument, nullptr, 'n', "Number of messages per client"};
 
 constexpr OptionWrapper INTERVAL_OPTION = {"interval", required_argument, nullptr, 'i', "Produce interval (ms)"};
 
