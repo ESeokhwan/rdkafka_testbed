@@ -1,5 +1,6 @@
 #include "service_runner.h"
 #include <chrono>
+#include <stdexcept>
 
 namespace {
 
@@ -40,36 +41,52 @@ ServicesRunner::ServicesRunner(
 
 ServicesRunner::~ServicesRunner() {
     close();
+    if (!has_run.load()) {
+        close_warmup();
+        close_services();
+    }
 }
 
 void ServicesRunner::run() {
-    if (is_closed.load()) return;
-    warmup();
+    if (has_run.exchange(true)) {
+        throw std::logic_error("ServicesRunner::run() must only be called once.");
+    }
 
-    start_signal->wait();
-    if (is_closed.load()) return;
+    try {
+        if (!is_closed.load()) warmup();
 
-    init_first_schedules();
-    run_schedules();
+        if (!is_closed.load()) start_signal->wait();
+        if (!is_closed.load()) {
+            init_first_schedules();
+            run_schedules();
+        }
+    } catch (...) {
+        close();
+        close_warmup();
+        close_services();
+        throw;
+    }
 
     close();
+    close_warmup();
+    close_services();
 }
 
 void ServicesRunner::close() {
     if (is_closed.exchange(true)) return;
 
     close_cv.notify_all();
-    for (auto& svc : services) svc->close();
 }
 
 void ServicesRunner::warmup() {
     if (!warmup_service) return;
-    while (warmup_service->has_more()) {
+
+    while (!is_closed.load() && warmup_service->has_more()) {
         warmup_service->reserve();
         warmup_service->work();
     }
-    warmup_service->close_scheduled();
-    warmup_service->close();
+
+    close_warmup();
 }
 
 void ServicesRunner::init_first_schedules() {
@@ -96,7 +113,7 @@ void ServicesRunner::run_schedules() {
         bool has_more = cur_task.service->reserve();
         cur_task.service->work();
 
-        if (has_more) {
+        if (has_more && !is_closed.load()) {
             auto next_time = calc_next_tick(cur_task.service->cur_interval());
             lock.lock();
             schedule_queue.push({next_time, cur_task.service});
@@ -106,6 +123,20 @@ void ServicesRunner::run_schedules() {
 
         lock.lock();
     }
+}
+
+void ServicesRunner::close_warmup() {
+    std::call_once(warmup_close_flag, [this]() {
+        if (!warmup_service) return;
+        warmup_service->close_scheduled();
+        warmup_service->close();
+    });
+}
+
+void ServicesRunner::close_services() {
+    std::call_once(services_close_flag, [this]() {
+        for (const auto& service : services) service->close();
+    });
 }
 
 }

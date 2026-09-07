@@ -7,6 +7,7 @@
 #include <chrono>
 #include <latch>
 #include <condition_variable>
+#include <mutex>
 
 namespace common {
 
@@ -33,10 +34,15 @@ private:
 
     std::condition_variable close_cv;
     std::atomic<bool> is_closed{false};
+    std::atomic<bool> has_run{false};
+    std::once_flag warmup_close_flag;
+    std::once_flag services_close_flag;
 
     void warmup();
     void init_first_schedules();
     void run_schedules();
+    void close_warmup();
+    void close_services();
 
 public:
     ServicesRunner(std::vector<std::shared_ptr<IService>> svcs, 
@@ -46,6 +52,9 @@ public:
     virtual ~ServicesRunner();
 
     void run();
+
+    // Requests a stop and wakes the scheduler. The run() thread closes the
+    // services, so callers must join that thread before destroying the runner.
     void close();
 };
 
