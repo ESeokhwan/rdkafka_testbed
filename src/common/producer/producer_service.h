@@ -16,6 +16,7 @@ namespace producer {
 
 class ProducerService: public AbstractService {
 private:
+    const std::string service_id;
     const std::string topic_name;
     const int32_t partition;
     const size_t round_cnt;
@@ -37,6 +38,7 @@ private:
 
 public:
     ProducerService(
+        const std::string& service_id,
         RdKafka::Producer *producer,
         const std::string& topic_name,
         size_t round_cnt,
@@ -55,6 +57,7 @@ public:
     );
 
     ProducerService(
+        const std::string& service_id,
         const std::string& brokers,
         const std::string& client_id,
         const std::string& topic_name,
@@ -73,7 +76,8 @@ public:
         std::shared_ptr<moniq::writer::MonitorLogWriter> &writer
     );
 
-        ProducerService(
+    ProducerService(
+        const std::string& service_id,
         RdKafka::Producer *producer,
         const std::string& topic_name,
         int32_t partition,
@@ -93,6 +97,7 @@ public:
     );
 
     ProducerService(
+        const std::string& service_id,
         const std::string& brokers,
         const std::string& client_id,
         const std::string& topic_name,
@@ -111,7 +116,6 @@ public:
         std::shared_ptr<moniq::MonitorQueue> &monitor_queue,
         std::shared_ptr<moniq::writer::MonitorLogWriter> &writer
     );
-
 
     virtual ~ProducerService() = default;
 

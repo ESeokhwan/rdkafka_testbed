@@ -18,6 +18,7 @@ namespace common {
 namespace producer {
 
 ProducerService::ProducerService(
+    const std::string& service_id,
     RdKafka::Producer *producer,
     const std::string& topic_name,
     size_t round_cnt,
@@ -38,7 +39,7 @@ ProducerService::ProducerService(
     util::generate_noises(
         interval_noise_stddev, interval_max_abs_noise,
         std::min(round_cnt, util::MAX_NOISE_LIST_LENGTH), rng)
-    ), topic_name(topic_name), partition(RdKafka::Topic::PARTITION_UA),
+    ), service_id(service_id), topic_name(topic_name), partition(RdKafka::Topic::PARTITION_UA),
     round_cnt(round_cnt), is_sync(is_sync),
     ignore_response(ignore_response), need_flush(need_flush),
     log_enabled(log_enabled), msg_tagged(msg_tagged),
@@ -46,6 +47,7 @@ ProducerService::ProducerService(
     adaptor(adaptor), monitor_queue(monitor_queue), writer(writer) {}
 
 ProducerService::ProducerService(
+    const std::string& service_id,
     const std::string& brokers,
     const std::string& client_id,
     const std::string& topic_name,
@@ -67,7 +69,7 @@ ProducerService::ProducerService(
     util::generate_noises(
         interval_noise_stddev, interval_max_abs_noise,
         std::min(round_cnt, util::MAX_NOISE_LIST_LENGTH), rng)
-    ), topic_name(topic_name), partition(RdKafka::Topic::PARTITION_UA),
+    ), service_id(service_id), topic_name(topic_name), partition(RdKafka::Topic::PARTITION_UA),
     round_cnt(round_cnt), is_sync(is_sync),
     ignore_response(ignore_response), need_flush(need_flush),
     log_enabled(log_enabled), msg_tagged(msg_tagged),
@@ -88,6 +90,7 @@ ProducerService::ProducerService(
 }
 
 ProducerService::ProducerService(
+    const std::string& service_id,
     RdKafka::Producer *producer,
     const std::string& topic_name,
     int32_t partition,
@@ -109,13 +112,14 @@ ProducerService::ProducerService(
     util::generate_noises(
         interval_noise_stddev, interval_max_abs_noise,
         std::min(round_cnt, util::MAX_NOISE_LIST_LENGTH), rng)
-    ), topic_name(topic_name), partition(partition), round_cnt(round_cnt),
+    ), service_id(service_id), topic_name(topic_name), partition(partition), round_cnt(round_cnt),
     is_sync(is_sync), ignore_response(ignore_response), need_flush(need_flush),
     log_enabled(log_enabled), msg_tagged(msg_tagged),
     producer(producer), need_to_cleanup_producer(false),
     adaptor(adaptor), monitor_queue(monitor_queue), writer(writer) {}
 
 ProducerService::ProducerService(
+    const std::string& service_id,
     const std::string& brokers,
     const std::string& client_id,
     const std::string& topic_name,
@@ -138,7 +142,7 @@ ProducerService::ProducerService(
     util::generate_noises(
         interval_noise_stddev, interval_max_abs_noise,
         std::min(round_cnt, util::MAX_NOISE_LIST_LENGTH), rng)
-    ), topic_name(topic_name), partition(partition), round_cnt(round_cnt),
+    ), service_id(service_id), topic_name(topic_name), partition(partition), round_cnt(round_cnt),
     is_sync(is_sync), ignore_response(ignore_response), need_flush(need_flush),
     log_enabled(log_enabled), msg_tagged(msg_tagged),
     need_to_cleanup_producer(true), adaptor(adaptor),
@@ -163,7 +167,7 @@ bool ProducerService::is_done() {
 
 void ProducerService::work() {
     size_t idx = cur_idx.fetch_add(1, std::memory_order_relaxed);
-    std::string core_msg = topic_name + "_" + std::to_string(idx);
+    std::string core_msg = service_id + "_" + std::to_string(idx);
     if (msg_tagged && log_enabled) core_msg = "R" + core_msg;
 
     std::string msg = this->adaptor->generate(core_msg);

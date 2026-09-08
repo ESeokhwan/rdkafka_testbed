@@ -185,6 +185,7 @@ void BasicProducersTest::init_sharing_prod_services() {
 
         for (int j = 0; j < args.topic_cnt_per_client; j++) {
             shared_ptr<IService> service = make_shared<producer::ProducerService>(
+                args.prefix + "_" + to_string(i) + "_" + to_string(j),
                 producer,
                 args.prefix + "_" + to_string(i) + "_" + to_string(j),
                 args.msg_cnt_per_topic,
@@ -204,6 +205,7 @@ void BasicProducersTest::init_sharing_prod_services() {
             services.push_back(service);
         }
         shared_ptr<IService> warmup_service = make_shared<producer::ProducerService>(
+            "warmup_" + to_string(i),
             producer,
             args.warmup_topic,
             args.warmup_cnt,
@@ -222,7 +224,7 @@ void BasicProducersTest::init_sharing_prod_services() {
         );
 
         services_runners.push_back(make_unique<ServicesRunner>(
-            services, warmup_service, args.interval_btw_topic, 
+            services, warmup_service, args.interval_btw_topic,
             args.interval_btw_topic_noise_stddev, args.interval_btw_topic / 2,
             rng, &start_signal
         ));
@@ -235,6 +237,7 @@ void BasicProducersTest::init_standalone_services() {
         vector<shared_ptr<IService>> services;
         for (int j = 0; j < args.topic_cnt_per_client; j++) {
             shared_ptr<IService> service = make_shared<producer::ProducerService>(
+                args.prefix + "_" + to_string(i) + "_" + to_string(j),
                 args.broker,
                 args.prefix + "_" + to_string(i),
                 args.prefix + "_" + to_string(i) + "_" + to_string(j),
@@ -255,6 +258,7 @@ void BasicProducersTest::init_standalone_services() {
             services.push_back(service);
         }
         shared_ptr<IService> warmup_service = make_shared<producer::ProducerService>(
+            "warmup_" + to_string(i),
             args.broker,
             "warmup_" + to_string(i),
             args.warmup_topic,
@@ -274,7 +278,7 @@ void BasicProducersTest::init_standalone_services() {
         );
 
         services_runners.push_back(make_unique<ServicesRunner>(
-            services, warmup_service, args.interval_btw_topic, 
+            services, warmup_service, args.interval_btw_topic,
             args.interval_btw_topic_noise_stddev, args.interval_btw_topic / 2,
             rng, &start_signal
         ));

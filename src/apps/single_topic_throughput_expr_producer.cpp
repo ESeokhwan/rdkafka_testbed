@@ -195,6 +195,7 @@ void BasicProducersTest::init_sharing_prod_services(vector<ClientAssignment> cli
 
         for (PartitionAssignment pa: client_assignments[i].partition_assignments) {
             shared_ptr<IService> service = make_shared<producer::ProducerService>(
+                args.prefix + "_" + to_string(i) + "_" + to_string(pa.partition),
                 producer,
                 args.topic_name,
                 pa.partition,
@@ -215,6 +216,7 @@ void BasicProducersTest::init_sharing_prod_services(vector<ClientAssignment> cli
             services.push_back(service);
         }
         shared_ptr<IService> warmup_service = make_shared<producer::ProducerService>(
+            "warmup_" + to_string(i),
             producer,
             args.warmup_topic,
             args.warmup_cnt,
@@ -245,6 +247,7 @@ void BasicProducersTest::init_standalone_services(vector<ClientAssignment> clien
         vector<shared_ptr<IService>> services;
         for (PartitionAssignment pa: client_assignments[i].partition_assignments) {
             shared_ptr<IService> service = make_shared<producer::ProducerService>(
+                args.prefix + "_" + to_string(i) + "_" + to_string(pa.partition),
                 args.broker,
                 args.prefix + "_" + to_string(i),
                 args.topic_name,
@@ -266,6 +269,7 @@ void BasicProducersTest::init_standalone_services(vector<ClientAssignment> clien
             services.push_back(service);
         }
         shared_ptr<IService> warmup_service = make_shared<producer::ProducerService>(
+            "warmup_" + to_string(i),
             args.broker,
             "warmup_" + to_string(i),
             args.warmup_topic,
