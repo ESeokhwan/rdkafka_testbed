@@ -131,7 +131,7 @@ int main(int argc, char *argv[]) {
     }
 
     shared_ptr<moniq::adaptor::IMessageAdaptor> adaptor =
-        make_shared<moniq::adaptor::JsonBasedLatencyMonitoringMessageGenerator>(args.msg_size, min(args.msg_size, 1000));
+        make_shared<moniq::adaptor::FastJsonBasedLatencyMonitoringMessageGenerator>(args.msg_size, min(args.msg_size, 1000));
     shared_ptr<moniq::MonitorQueue> monitor_queue = make_shared<moniq::MonitorQueue>();
     shared_ptr<moniq::writer::IMonitorLogWriteStrategy> write_strategy =
         make_shared<moniq::writer::ConsoleMonitorLogWriteStrategy>(args.scrapable);
