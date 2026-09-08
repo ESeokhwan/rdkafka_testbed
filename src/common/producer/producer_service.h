@@ -2,6 +2,7 @@
 
 #include "service.h"
 
+#include <cstdint>
 #include <libmoniq/adaptor/message_adaptor.h>
 #include <libmoniq/monitor_queue.h>
 #include <libmoniq/writer/monitor_log_writer.h>
@@ -16,6 +17,7 @@ namespace producer {
 class ProducerService: public AbstractService {
 private:
     const std::string topic_name;
+    const int32_t partition;
     const size_t round_cnt;
     const bool is_sync;
     const bool ignore_response;
@@ -70,6 +72,46 @@ public:
         std::shared_ptr<moniq::MonitorQueue> &monitor_queue,
         std::shared_ptr<moniq::writer::MonitorLogWriter> &writer
     );
+
+        ProducerService(
+        RdKafka::Producer *producer,
+        const std::string& topic_name,
+        int32_t partition,
+        size_t round_cnt,
+        double interval,
+        double interval_noise_stddev,
+        double interval_max_abs_noise,
+        std::mt19937& rng,
+        bool is_sync,
+        bool ignore_response,
+        bool need_flush,
+        bool log_enabled,
+        bool msg_tagged,
+        std::shared_ptr<moniq::adaptor::IMessageAdaptor> &adaptor,
+        std::shared_ptr<moniq::MonitorQueue> &monitor_queue,
+        std::shared_ptr<moniq::writer::MonitorLogWriter> &writer
+    );
+
+    ProducerService(
+        const std::string& brokers,
+        const std::string& client_id,
+        const std::string& topic_name,
+        int32_t partition,
+        size_t round_cnt,
+        double interval,
+        double interval_noise_stddev,
+        double interval_max_abs_noise,
+        std::mt19937& rng,
+        bool is_sync,
+        bool ignore_response,
+        bool need_flush,
+        bool log_enabled,
+        bool msg_tagged,
+        std::shared_ptr<moniq::adaptor::IMessageAdaptor> &adaptor,
+        std::shared_ptr<moniq::MonitorQueue> &monitor_queue,
+        std::shared_ptr<moniq::writer::MonitorLogWriter> &writer
+    );
+
 
     virtual ~ProducerService() = default;
 

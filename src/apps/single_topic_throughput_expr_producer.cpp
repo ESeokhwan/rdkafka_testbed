@@ -1,6 +1,6 @@
 #include "abstract_application.h"
 #include "service.h"
-#include "service_runner.h"
+#include "throughput_service_runner.h"
 #include "util/cli_arg_util.h"
 #include "util/time_util.h"
 #include "producer/producer_service.h"
@@ -9,6 +9,7 @@
 #include <iostream>
 #include <memory>
 #include <getopt.h>
+#include <vector>
 #include <random>
 #include <string>
 #include <thread>
@@ -20,6 +21,7 @@
 #include <libmoniq/writer/write_strategy/monitor_log_write_strategy.h>
 #include <libmoniq/adaptor/latency_monitoring_message_adaptor.h>
 #include <libmoniq/adaptor/message_adaptor.h>
+#include <vector>
 
 using namespace std;
 using namespace common;
@@ -31,8 +33,9 @@ struct Arguments {
 
     string prefix;
     string topic_name;
+    int partition_cnt;
     int client_cnt;
-    int msg_cnt_per_client;
+    int msg_cnt;
     double interval;
     double interval_noise_stddev;
     int msg_size;
@@ -52,6 +55,15 @@ struct Arguments {
     bool verbose;
 };
 
+struct PartitionAssignment {
+    int partition;
+    int msg_cnt;
+};
+
+struct ClientAssignment {
+    vector<PartitionAssignment> partition_assignments;
+};
+
 class BasicProducersTest: public AbstractApplication {
 protected:
     void cleanup_main() override;
@@ -60,7 +72,7 @@ private:
     Arguments args;
 
     unique_ptr<RdKafka::DeliveryReportCb> dr_cb;
-    vector<unique_ptr<ServicesRunner>> services_runners;
+    vector<unique_ptr<ThroughputServicesRunner>> services_runners;
     vector<thread> client_threads;
     vector<RdKafka::Producer *> shared_producers;
 
@@ -68,8 +80,8 @@ private:
     random_device rd;
 
     void init_services();
-    void init_standalone_services();
-    void init_sharing_prod_services();
+    void init_standalone_services(vector<ClientAssignment> client_assignments);
+    void init_sharing_prod_services(vector<ClientAssignment> client_assignments);
     void join_clients();
 
 public:
@@ -88,11 +100,11 @@ public:
     void close_service_runners();
 };
 
-
 // Define global variables & helper functions
 namespace {
     BasicProducersTest *app;
 
+    vector<ClientAssignment> client_assignment_setup(int client_cnt, int partition_cnt, int total_msg_cnt);
     Arguments parse_arguments(int argc, char **argv);
     void interrupt_handler(int signum);
 }
@@ -108,8 +120,9 @@ int main(int argc, char *argv[]) {
             << "Broker: " << args.broker << "\n"
             << "Prefix: " << args.prefix << "\n"
             << "Topic Name: " << args.topic_name << "\n"
+            << "Partition Count" << args.partition_cnt << "\n"
             << "Client Count: " << args.client_cnt << "\n"
-            << "Message Count per Topic: " << args.msg_cnt_per_client << "\n"
+            << "Message Count per Topic: " << args.msg_cnt << "\n"
             << "Interval: " << args.interval << "\n"
             << "Interval Noise Stddev: " << args.interval_noise_stddev << "\n"
             << "Message Size: " << args.msg_size << "\n"
@@ -127,7 +140,7 @@ int main(int argc, char *argv[]) {
     }
 
     shared_ptr<moniq::adaptor::IMessageAdaptor> adaptor =
-        make_shared<moniq::adaptor::JsonBasedLatencyMonitoringMessageGenerator>(args.msg_size, min(args.msg_size, 1000));
+        make_shared<moniq::adaptor::FastJsonBasedLatencyMonitoringMessageGenerator>(args.msg_size, min(args.msg_size, 1000));
     shared_ptr<moniq::MonitorQueue> monitor_queue = make_shared<moniq::MonitorQueue>();
     shared_ptr<moniq::writer::IMonitorLogWriteStrategy> write_strategy =
         make_shared<moniq::writer::ConsoleMonitorLogWriteStrategy>(args.scrapable);
@@ -152,15 +165,16 @@ void BasicProducersTest::run() {
 }
 
 void BasicProducersTest::init_services() {
-    if (args.share_producer) init_sharing_prod_services();
-    else init_standalone_services();
+    vector<ClientAssignment> client_assignment = client_assignment_setup(args.client_cnt, args.partition_cnt, args.msg_cnt);
+    if (args.share_producer) init_sharing_prod_services(client_assignment);
+    else init_standalone_services(client_assignment);
 
     for (const auto &service_runner: services_runners) {
-        client_threads.push_back(thread(&ServicesRunner::run, service_runner.get()));
+        client_threads.push_back(thread(&ThroughputServicesRunner::run, service_runner.get()));
     }
 }
 
-void BasicProducersTest::init_sharing_prod_services() {
+void BasicProducersTest::init_sharing_prod_services(vector<ClientAssignment> client_assignments) {
     mt19937 rng(rd());
     for (int i = 0; i < args.client_cnt; i++) {
         vector<shared_ptr<IService>> services;
@@ -179,24 +193,27 @@ void BasicProducersTest::init_sharing_prod_services() {
         }
         shared_producers.push_back(producer);
 
-        shared_ptr<IService> service = make_shared<producer::ProducerService>(
-            producer,
-            args.topic_name,
-            args.msg_cnt_per_client,
-            args.interval,
-            args.interval_noise_stddev,
-            args.interval / 2,
-            rng,
-            args.is_sync,
-            args.ignore_response,
-            args.need_flush,
-            (!args.sample_log || i == 0),
-            args.tag_log,
-            adaptor,
-            monitor_queue,
-            writer
-        );
-        services.push_back(service);
+        for (PartitionAssignment pa: client_assignments[i].partition_assignments) {
+            shared_ptr<IService> service = make_shared<producer::ProducerService>(
+                producer,
+                args.topic_name,
+                pa.partition,
+                pa.msg_cnt,
+                args.interval,
+                args.interval_noise_stddev,
+                args.interval / 2,
+                rng,
+                args.is_sync,
+                args.ignore_response,
+                args.need_flush,
+                (!args.sample_log || i == 0),
+                args.tag_log,
+                adaptor,
+                monitor_queue,
+                writer
+            );
+            services.push_back(service);
+        }
         shared_ptr<IService> warmup_service = make_shared<producer::ProducerService>(
             producer,
             args.warmup_topic,
@@ -215,37 +232,39 @@ void BasicProducersTest::init_sharing_prod_services() {
             writer
         );
 
-        services_runners.push_back(make_unique<ServicesRunner>(
+        services_runners.push_back(make_unique<ThroughputServicesRunner>(
             services, warmup_service,
-            -1, 0, -1,
-            rng, &start_signal
+            1, &start_signal
         ));
     }
 }
 
-void BasicProducersTest::init_standalone_services() {
+void BasicProducersTest::init_standalone_services(vector<ClientAssignment> client_assignments) {
     mt19937 rng(rd());
     for (int i = 0; i < args.client_cnt; i++) {
         vector<shared_ptr<IService>> services;
-        shared_ptr<IService> service = make_shared<producer::ProducerService>(
-            args.broker,
-            args.prefix + "_" + to_string(i),
-            args.topic_name,
-            args.msg_cnt_per_client,
-            args.interval,
-            args.interval_noise_stddev,
-            args.interval / 2,
-            rng,
-            args.is_sync,
-            args.ignore_response,
-            args.need_flush,
-            (!args.sample_log || i == 0),
-            args.tag_log,
-            adaptor,
-            monitor_queue,
-            writer
-        );
-        services.push_back(service);
+        for (PartitionAssignment pa: client_assignments[i].partition_assignments) {
+            shared_ptr<IService> service = make_shared<producer::ProducerService>(
+                args.broker,
+                args.prefix + "_" + to_string(i),
+                args.topic_name,
+                pa.partition,
+                pa.msg_cnt,
+                args.interval,
+                args.interval_noise_stddev,
+                args.interval / 2,
+                rng,
+                args.is_sync,
+                args.ignore_response,
+                args.need_flush,
+                (!args.sample_log || i == 0),
+                args.tag_log,
+                adaptor,
+                monitor_queue,
+                writer
+            );
+            services.push_back(service);
+        }
         shared_ptr<IService> warmup_service = make_shared<producer::ProducerService>(
             args.broker,
             "warmup_" + to_string(i),
@@ -265,10 +284,9 @@ void BasicProducersTest::init_standalone_services() {
             writer
         );
 
-        services_runners.push_back(make_unique<ServicesRunner>(
+        services_runners.push_back(make_unique<ThroughputServicesRunner>(
             services, warmup_service,
-            -1, 0, -1,
-            rng, &start_signal
+            1, &start_signal
         ));
     }
 }
@@ -298,6 +316,44 @@ void BasicProducersTest::cleanup_main() {
 
 namespace {
 
+vector<ClientAssignment> client_assignment_setup(int client_cnt, int partition_cnt, int total_msg_cnt) {
+    vector<ClientAssignment> output;
+    vector<int> msg_cnt_per_client;
+    for (int i = 0; i < client_cnt; i++) {
+        ClientAssignment tmp;
+        tmp.partition_assignments = vector<PartitionAssignment>();
+
+        int tmp_cnt = total_msg_cnt / client_cnt;
+        if (i < total_msg_cnt % client_cnt) tmp_cnt += 1;
+        output.push_back(tmp);
+        msg_cnt_per_client.push_back(tmp_cnt);
+    }
+    if (client_cnt > partition_cnt) {
+        for (int i = 0; i < client_cnt; i++) {
+            PartitionAssignment tmp;
+            tmp.partition = i % partition_cnt;
+            tmp.msg_cnt = 0;
+            output[i].partition_assignments.push_back(tmp);
+        }
+    } else {
+        for (int i = 0; i < partition_cnt; i++) {
+            PartitionAssignment tmp;
+            tmp.partition = i % partition_cnt;
+            tmp.msg_cnt = 0;
+            output[i % client_cnt].partition_assignments.push_back(tmp);
+        }
+    }
+
+    for (int i = 0; i < client_cnt; i++) {
+        int partition_cnt_on_this_client = output[i].partition_assignments.size();
+        for (int j = 0; j < partition_cnt_on_this_client; j++) {
+            output[i].partition_assignments[j].msg_cnt = msg_cnt_per_client[i] / partition_cnt_on_this_client;
+            if (j < msg_cnt_per_client[i] % partition_cnt_on_this_client) output[i].partition_assignments[j].msg_cnt += 1;
+        }
+    }
+    return output;
+}
+
 void interrupt_handler(int signum) {
     if (app == nullptr) return;
     app->close_service_runners();
@@ -309,8 +365,9 @@ Arguments parse_arguments(int argc, char** argv) {
 
     args.prefix = "";
     args.topic_name = "";
+    args.partition_cnt = 1;
     args.client_cnt = 1;
-    args.msg_cnt_per_client = 1;
+    args.msg_cnt = 1;
     args.interval = 1000.0;
     args.interval_noise_stddev = 0;
     args.msg_size = 1000;
@@ -331,8 +388,9 @@ Arguments parse_arguments(int argc, char** argv) {
         util::BROKER_OPTION,
         util::PREFIX_OPTION,
         util::TOPIC_NAME_OPTION,
+        util::PARTITION_CNT_OPTION,
         util::CLIENT_CNT_OPTION,
-        util::MSG_CNT_PER_CLIENT_OPTION,
+        util::MSG_CNT_OPTION,
         util::INTERVAL_OPTION,
         util::INTERVAL_NOISE_STDDEV_OPTION,
         util::MSG_SIZE_OPTION,
@@ -358,8 +416,9 @@ Arguments parse_arguments(int argc, char** argv) {
             case util::BROKER_OPTION.get_val(): args.broker = optarg; break;
             case util::PREFIX_OPTION.get_val(): args.prefix = optarg; break;
             case util::TOPIC_NAME_OPTION.get_val(): args.topic_name = optarg; break;
+            case util::PARTITION_CNT_OPTION.get_val(): args.partition_cnt = atoi(optarg); break;
             case util::CLIENT_CNT_OPTION.get_val(): args.client_cnt = atoi(optarg); break;
-            case util::MSG_CNT_PER_CLIENT_OPTION.get_val(): args.msg_cnt_per_client = atoi(optarg); break;
+            case util::MSG_CNT_OPTION.get_val(): args.msg_cnt = atoi(optarg); break;
             case util::INTERVAL_OPTION.get_val(): args.interval = atof(optarg); break;
             case util::INTERVAL_NOISE_STDDEV_OPTION.get_val(): args.interval_noise_stddev = atof(optarg); break;
             case util::MSG_SIZE_OPTION.get_val(): args.msg_size = atoi(optarg); break;

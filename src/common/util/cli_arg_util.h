@@ -13,6 +13,7 @@ constexpr int LONG_OPTIONS_VAL_OFFSET = 257;
 
 enum class LongOnlyOptionVals {
     CLIENT_CNT = LONG_OPTIONS_VAL_OFFSET,
+    PARTITION_CNT,
     SERVICE_CNT,
     NOISE_STDDEV,
     FOR_CREATION,
@@ -111,12 +112,15 @@ constexpr OptionWrapper PREFIX_OPTION = {"prefix", required_argument, nullptr, '
 
 constexpr OptionWrapper TOPIC_NAME_OPTION = {"topic-name", required_argument, nullptr, 't', "Name of topic."};
 
+constexpr OptionWrapper PARTITION_CNT_OPTION = {"partition-cnt", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::PARTITION_CNT), "Number of partitions"};
+
 constexpr OptionWrapper GROUP_PREFIX_OPTION = {"group-prefix", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::GROUP_PREFIX), "Prefix for group id"};
 
 constexpr OptionWrapper CLIENT_PREFIX_OPTION = {"client-prefix", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::CLIENT_PREFIX), "Prefix for client id"};
 
 constexpr OptionWrapper TOPIC_PREFIX_OPTION = {"topic-prefix", required_argument, nullptr, static_cast<int>(LongOnlyOptionVals::TOPIC_PREFIX), "Prefix for topic"};
 
+constexpr OptionWrapper MSG_CNT_OPTION = {"msg-cnt", required_argument, nullptr, 'n', "Number of messages"};
 constexpr OptionWrapper ROUND_CNT_OPTION = {"round-cnt", required_argument, nullptr, 'n', "Number of rounds of each producer and service"};
 constexpr OptionWrapper MSG_CNT_PER_TOPIC_OPTION = {"msg-cnt-per-topic", required_argument, nullptr, 'n', "Number of messages per topic"};
 constexpr OptionWrapper MSG_CNT_PER_CLIENT_OPTION = {"msg-cnt-per-client", required_argument, nullptr, 'n', "Number of messages per client"};

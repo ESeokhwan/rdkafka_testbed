@@ -2,6 +2,7 @@
 
 #include "util/noise_util.h"
 #include "util/time_util.h"
+#include <cstdint>
 
 namespace {
 
@@ -33,12 +34,13 @@ ProducerService::ProducerService(
     std::shared_ptr<moniq::MonitorQueue> &monitor_queue,
     std::shared_ptr<moniq::writer::MonitorLogWriter> &writer
 ): AbstractService(
-    round_cnt, interval, 
+    round_cnt, interval,
     util::generate_noises(
         interval_noise_stddev, interval_max_abs_noise,
         std::min(round_cnt, util::MAX_NOISE_LIST_LENGTH), rng)
-    ), topic_name(topic_name), round_cnt(round_cnt),
-    is_sync(is_sync), ignore_response(ignore_response), need_flush(need_flush),
+    ), topic_name(topic_name), partition(RdKafka::Topic::PARTITION_UA),
+    round_cnt(round_cnt), is_sync(is_sync),
+    ignore_response(ignore_response), need_flush(need_flush),
     log_enabled(log_enabled), msg_tagged(msg_tagged),
     producer(producer), need_to_cleanup_producer(false),
     adaptor(adaptor), monitor_queue(monitor_queue), writer(writer) {}
@@ -61,12 +63,83 @@ ProducerService::ProducerService(
     std::shared_ptr<moniq::MonitorQueue> &monitor_queue,
     std::shared_ptr<moniq::writer::MonitorLogWriter> &writer
 ): AbstractService(
-    round_cnt, interval, 
+    round_cnt, interval,
     util::generate_noises(
         interval_noise_stddev, interval_max_abs_noise,
         std::min(round_cnt, util::MAX_NOISE_LIST_LENGTH), rng)
-    ), topic_name(topic_name), round_cnt(round_cnt), is_sync(is_sync),
+    ), topic_name(topic_name), partition(RdKafka::Topic::PARTITION_UA),
+    round_cnt(round_cnt), is_sync(is_sync),
     ignore_response(ignore_response), need_flush(need_flush),
+    log_enabled(log_enabled), msg_tagged(msg_tagged),
+    need_to_cleanup_producer(true), adaptor(adaptor),
+    monitor_queue(monitor_queue), writer(writer)
+{
+    std::string errstr;
+    dr_cb = new LoggingDeliveryReportCb(adaptor, monitor_queue, writer);
+    std::unique_ptr<RdKafka::Conf> conf = create_producer_conf(
+        brokers, client_id, is_sync || !ignore_response,
+        (log_enabled && !ignore_response) ? dr_cb: &NoOpsDeliveryReportCb::get_instance(),
+        errstr
+    );
+    producer = RdKafka::Producer::create(conf.get(), errstr);
+    if (!producer) {
+        throw std::runtime_error(errstr);
+    }
+}
+
+ProducerService::ProducerService(
+    RdKafka::Producer *producer,
+    const std::string& topic_name,
+    int32_t partition,
+    size_t round_cnt,
+    double interval,
+    double interval_noise_stddev,
+    double interval_max_abs_noise,
+    std::mt19937& rng,
+    bool is_sync,
+    bool ignore_response,
+    bool need_flush,
+    bool log_enabled,
+    bool msg_tagged,
+    std::shared_ptr<moniq::adaptor::IMessageAdaptor> &adaptor,
+    std::shared_ptr<moniq::MonitorQueue> &monitor_queue,
+    std::shared_ptr<moniq::writer::MonitorLogWriter> &writer
+): AbstractService(
+    round_cnt, interval,
+    util::generate_noises(
+        interval_noise_stddev, interval_max_abs_noise,
+        std::min(round_cnt, util::MAX_NOISE_LIST_LENGTH), rng)
+    ), topic_name(topic_name), partition(partition), round_cnt(round_cnt),
+    is_sync(is_sync), ignore_response(ignore_response), need_flush(need_flush),
+    log_enabled(log_enabled), msg_tagged(msg_tagged),
+    producer(producer), need_to_cleanup_producer(false),
+    adaptor(adaptor), monitor_queue(monitor_queue), writer(writer) {}
+
+ProducerService::ProducerService(
+    const std::string& brokers,
+    const std::string& client_id,
+    const std::string& topic_name,
+    int32_t partition,
+    size_t round_cnt,
+    double interval,
+    double interval_noise_stddev,
+    double interval_max_abs_noise,
+    std::mt19937& rng,
+    bool is_sync,
+    bool ignore_response,
+    bool need_flush,
+    bool log_enabled,
+    bool msg_tagged,
+    std::shared_ptr<moniq::adaptor::IMessageAdaptor> &adaptor,
+    std::shared_ptr<moniq::MonitorQueue> &monitor_queue,
+    std::shared_ptr<moniq::writer::MonitorLogWriter> &writer
+): AbstractService(
+    round_cnt, interval,
+    util::generate_noises(
+        interval_noise_stddev, interval_max_abs_noise,
+        std::min(round_cnt, util::MAX_NOISE_LIST_LENGTH), rng)
+    ), topic_name(topic_name), partition(partition), round_cnt(round_cnt),
+    is_sync(is_sync), ignore_response(ignore_response), need_flush(need_flush),
     log_enabled(log_enabled), msg_tagged(msg_tagged),
     need_to_cleanup_producer(true), adaptor(adaptor),
     monitor_queue(monitor_queue), writer(writer)
@@ -102,7 +175,7 @@ void ProducerService::work() {
         writer->notify_if_needed();
     }
     producer->produce(
-        topic_name, RdKafka::Topic::PARTITION_UA, RdKafka::Producer::RK_MSG_COPY, 
+        topic_name, partition, RdKafka::Producer::RK_MSG_COPY,
         const_cast<void*>(static_cast<const void*>(msg.c_str())),
         msg.size(), nullptr, 0, 0, nullptr
     );
@@ -120,7 +193,7 @@ void ProducerService::close() {
 void LoggingDeliveryReportCb::dr_cb(RdKafka::Message &message) {
     int64_t responded_at = common::util::get_current_timestamp();
     if (message.err() == RdKafka::ERR_NO_ERROR) {
-        std::string message_plain_str = message.payload() ? 
+        std::string message_plain_str = message.payload() ?
             std::string(static_cast<const char*>(message.payload()), message.len()) : "";
         std::string message_str = adaptor->extract_content(message_plain_str);
         monitor_queue->enqueue(std::make_unique<moniq::MonitorLog>(
