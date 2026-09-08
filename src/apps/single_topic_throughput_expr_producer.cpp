@@ -1,6 +1,6 @@
 #include "abstract_application.h"
 #include "service.h"
-#include "throughput_service_runner.h"
+#include "service_runner.h"
 #include "util/cli_arg_util.h"
 #include "util/time_util.h"
 #include "producer/producer_service.h"
@@ -72,7 +72,7 @@ private:
     Arguments args;
 
     unique_ptr<RdKafka::DeliveryReportCb> dr_cb;
-    vector<unique_ptr<ThroughputServicesRunner>> services_runners;
+    vector<unique_ptr<ServicesRunner>> services_runners;
     vector<thread> client_threads;
     vector<RdKafka::Producer *> shared_producers;
 
@@ -170,7 +170,7 @@ void BasicProducersTest::init_services() {
     else init_standalone_services(client_assignment);
 
     for (const auto &service_runner: services_runners) {
-        client_threads.push_back(thread(&ThroughputServicesRunner::run, service_runner.get()));
+        client_threads.push_back(thread(&ServicesRunner::run, service_runner.get()));
     }
 }
 
@@ -234,9 +234,9 @@ void BasicProducersTest::init_sharing_prod_services(vector<ClientAssignment> cli
             writer
         );
 
-        services_runners.push_back(make_unique<ThroughputServicesRunner>(
+        services_runners.push_back(make_unique<ServicesRunner>(
             services, warmup_service,
-            1, &start_signal
+            -1, 0, -1, rng, &start_signal
         ));
     }
 }
@@ -288,9 +288,9 @@ void BasicProducersTest::init_standalone_services(vector<ClientAssignment> clien
             writer
         );
 
-        services_runners.push_back(make_unique<ThroughputServicesRunner>(
+        services_runners.push_back(make_unique<ServicesRunner>(
             services, warmup_service,
-            1, &start_signal
+            -1, 0, -1, rng, &start_signal
         ));
     }
 }

@@ -8,7 +8,7 @@ namespace {
 
 void flush_producer(RdKafka::Producer* producer) {
     while (producer->outq_len() > 0) {
-        producer->poll(0);
+        producer->poll(60 * 1000);
     }
 }
 
