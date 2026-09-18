@@ -242,6 +242,18 @@ void BasicProducersTest::init_sharing_prod_services(vector<ClientAssignment> cli
 }
 
 void BasicProducersTest::init_standalone_services(vector<ClientAssignment> client_assignments) {
+    std::string errstr;
+    unique_ptr<RdKafka::Conf> conf = producer::ProducerService::create_producer_conf(
+        args.broker, "warmup_producer", false,
+        &producer::NoOpsDeliveryReportCb::get_instance(),
+        errstr
+    );
+    RdKafka::Producer *warmup_producer = RdKafka::Producer::create(conf.get(), errstr);
+    if (!warmup_producer) {
+        throw std::runtime_error(errstr);
+    }
+    shared_producers.push_back(warmup_producer);
+
     mt19937 rng(rd());
     for (int i = 0; i < args.client_cnt; i++) {
         vector<shared_ptr<IService>> services;
@@ -270,8 +282,7 @@ void BasicProducersTest::init_standalone_services(vector<ClientAssignment> clien
         }
         shared_ptr<IService> warmup_service = make_shared<producer::ProducerService>(
             "warmup_" + to_string(i),
-            args.broker,
-            "warmup_" + to_string(i),
+            warmup_producer,
             args.warmup_topic,
             args.warmup_cnt,
             0,
