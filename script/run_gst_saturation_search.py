@@ -256,8 +256,11 @@ def parse_args():
     p.add_argument("--gst-topic-template", default="test_gs_topic_p{p}")
     p.add_argument("--single-topic", default="test_single_topic")
     p.add_argument("--create-topics", action="store_true")
-    p.add_argument("--delete-topics-after", action="store_true",
-                   help="ask the fixed-partition runner to delete experiment topics after each tested client count")
+    cleanup = p.add_mutually_exclusive_group()
+    cleanup.add_argument("--delete-topics-after", action="store_true",
+                         help="ask the fixed-partition runner to delete experiment topics after each tested client count")
+    cleanup.add_argument("--delete-topics-after-search", action="store_true",
+                         help="reuse topics between client counts and delete once after each mode/P search")
     p.add_argument("--topic-delete-timeout", type=finite_float, default=120,
                    help="seconds allowed for topic deletion and disappearance from the topic list (120)")
     p.add_argument("--output-root", type=Path, default=ROOT / "out/gst_saturation")
@@ -303,7 +306,7 @@ def parse_args():
             p.error("invalid topic template: {}".format(error))
         if not re.fullmatch(r"[A-Za-z0-9._-]{1,249}", topic) or topic in (".", ".."):
             p.error("topic template must produce a valid Kafka topic name")
-        if a.delete_topics_after and topic == "__global_sequence_index":
+        if (a.delete_topics_after or a.delete_topics_after_search) and topic == "__global_sequence_index":
             p.error("the shared GST index cannot be used as a cleanup target")
     if a.max_clients > 2147483647 // a.messages_per_client:
         p.error("max-clients * messages-per-client exceeds the app's --msg-cnt range")
@@ -341,6 +344,15 @@ class Search:
             command.extend(["--delete-topics-after", "--topic-delete-timeout", str(a.topic_delete_timeout)])
         return command
 
+    def cleanup_command(self, mode, partitions, directory):
+        a = self.args
+        topic_option = "--single-topic" if mode == "single" else "--{}-topic".format(mode)
+        return ["/bin/bash", str(a.runner), "--cleanup-only", "--broker", a.broker,
+                "--partitions", str(partitions), "--modes", mode,
+                "--replication-factor", str(a.replication_factor), "--kafka-bin", str(a.kafka_bin),
+                "--topic-delete-timeout", str(a.topic_delete_timeout),
+                "--output-root", str(directory / "runner"), topic_option, self.topic(mode, partitions)]
+
     def save(self):
         for name, rows in (("probes", self.probes), ("boundaries", self.boundaries)):
             (self.output / (name + ".json")).write_text(json.dumps(rows, indent=2) + "\n")
@@ -360,7 +372,8 @@ class Search:
             try:
                 # Give the runner time to stop its producer and perform EXIT
                 # cleanup before forcibly killing the owned runner group.
-                self.child.wait(timeout=self.args.topic_delete_timeout + 10 if self.args.delete_topics_after else 5)
+                self.child.wait(timeout=self.args.topic_delete_timeout + 10
+                                if self.args.delete_topics_after or self.args.delete_topics_after_search else 5)
             except subprocess.TimeoutExpired:
                 pass
             # The runner may exit before one of its pipeline children does.
@@ -371,8 +384,8 @@ class Search:
             self.child.wait()
             self.child = None
 
-    def read_cleanup(self, directory, row):
-        if not self.args.delete_topics_after:
+    def read_cleanup(self, directory, row, force=False):
+        if not self.args.delete_topics_after and not force:
             return
         reports = list((directory / "runner").glob("*/topic_cleanup.tsv"))
         if len(reports) == 1:
@@ -388,6 +401,47 @@ class Search:
             except (OSError, ValueError, KeyError, TypeError) as error:
                 row.update(topic_cleanup_status="ERROR", topic_cleanup_reason="invalid runner cleanup report: {}".format(error))
 
+    def cleanup_search_topic(self, mode, partitions, points):
+        result = dict(topic_cleanup_status="SKIPPED_NOT_PREPARED", topic_cleanup_reason="topic never passed preparation checks")
+        directory = None
+        try:
+            expected = "{}\t{}\t{}\n".format(mode, self.topic(mode, partitions), partitions)
+            ready = any(path.read_text() == expected for point in points
+                        for path in Path(point["log_dir"]).glob("runner/*/repeat_*/topic_ready.tsv"))
+            if not ready:
+                return result
+            directory = self.output / "{}_p{}".format(mode, partitions) / "search_cleanup"
+            directory.mkdir()
+            result.update(topic_cleanup_status="NOT_REPORTED", topic_cleanup_reason="")
+            command = self.cleanup_command(mode, partitions, directory)
+            (directory / "command.json").write_text(json.dumps(command, indent=2) + "\n")
+            print("  search finished; runner cleaning topic: {}".format(self.topic(mode, partitions)), flush=True)
+            with (directory / "runner.log").open("w") as log:
+                self.child = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+                try:
+                    code = self.child.wait(timeout=self.args.topic_delete_timeout + 60)
+                except subprocess.TimeoutExpired:
+                    self.stop_child()
+                    raise SearchError("cleanup runner timed out")
+                self.child = None
+            self.read_cleanup(directory, result, force=True)
+            if code and result["topic_cleanup_status"] not in ("ERROR", "INTERRUPTED"):
+                result.update(topic_cleanup_status="ERROR", topic_cleanup_reason="cleanup runner exit {}; see {}".format(code, directory / "runner.log"))
+            if result["topic_cleanup_status"] == "NOT_REPORTED":
+                raise SearchError("runner did not report topic cleanup")
+        except (SearchError, OSError, ValueError) as error:
+            result.update(topic_cleanup_status="ERROR", topic_cleanup_reason=str(error))
+        except KeyboardInterrupt:
+            self.stop_child()
+            if directory is not None:
+                self.read_cleanup(directory, result, force=True)
+            result["controller_interrupted"] = True
+            if result["topic_cleanup_status"] == "NOT_REPORTED":
+                result.update(topic_cleanup_status="INTERRUPTED", topic_cleanup_reason="controller_interrupted_during_cleanup")
+        finally:
+            self.stop_child()
+        return result
+
     def probe(self, mode, partitions, clients, phase, cache):
         if clients in cache:
             return cache[clients]
@@ -398,7 +452,7 @@ class Search:
         row = dict(mode=mode, partitions=partitions, clients=clients, search_phase=phase, status="ERROR",
                    theoretical_throughput_req_per_sec=clients * 1000 / self.args.interval,
                    average_throughput_req_per_sec=None, achieved_ratio=None, saturated=None,
-                   topic_cleanup_status="NOT_REPORTED" if self.args.delete_topics_after else "DISABLED",
+                   topic_cleanup_status="NOT_REPORTED" if self.args.delete_topics_after else "DEFERRED" if self.args.delete_topics_after_search else "DISABLED",
                    topic_cleanup_reason="",
                    started_at=utc_now(), log_dir=str(directory), reason="")
         self.probes.append(row)
@@ -511,13 +565,18 @@ class Search:
         self.boundaries.append(boundary)
         self.save()
         points = [row for row in self.probes if row["mode"] == mode and row["partitions"] == partitions]
-        cleanup_status = next((status for status in ("ERROR", "INTERRUPTED", "NOT_REPORTED", "DELETED", "SKIPPED_NOT_PREPARED", "DISABLED")
-                               if any(row["topic_cleanup_status"] == status for row in points)), "NOT_REPORTED")
-        boundary.update(topic_cleanup_status=cleanup_status,
-                        topic_cleanup_reason="; ".join(dict.fromkeys(row["topic_cleanup_reason"] for row in points if row["topic_cleanup_reason"])))
+        if a.delete_topics_after_search:
+            cleanup = self.cleanup_search_topic(mode, partitions, points)
+            interrupted = interrupted or cleanup.pop("controller_interrupted", False)
+            boundary.update(cleanup)
+        else:
+            cleanup_status = next((status for status in ("ERROR", "INTERRUPTED", "NOT_REPORTED", "DELETED", "SKIPPED_NOT_PREPARED", "DISABLED")
+                                   if any(row["topic_cleanup_status"] == status for row in points)), "NOT_REPORTED")
+            boundary.update(topic_cleanup_status=cleanup_status,
+                            topic_cleanup_reason="; ".join(dict.fromkeys(row["topic_cleanup_reason"] for row in points if row["topic_cleanup_reason"])))
         self.save()
         print("  boundary: {} last_good={} first_saturated={}".format(boundary["status"], low, high), flush=True)
-        if interrupted or cleanup_status == "INTERRUPTED":
+        if interrupted or boundary["topic_cleanup_status"] == "INTERRUPTED":
             raise KeyboardInterrupt
 
     def run(self):
@@ -531,6 +590,9 @@ class Search:
                 print(" ".join(shlex.quote(part) for part in self.command(mode, partitions, start, a.output_root / "dry-run")))
                 if a.delete_topics_after:
                     print("  runner deletes validated topic {} after each C, including repetitions (timeout {}s)".format(self.topic(mode, partitions), a.topic_delete_timeout))
+                elif a.delete_topics_after_search:
+                    print("  reuse topic between C values; after this search run:")
+                    print(" ".join(shlex.quote(part) for part in self.cleanup_command(mode, partitions, a.output_root / "dry-run-cleanup")))
             return 0
         for executable in (a.runner, a.producer, a.kafka_bin / "kafka-topics.sh", a.kafka_bin / "kafka-broker-extension.sh", Path(__file__).resolve()):
             if not executable.is_file() or not os.access(str(executable), os.X_OK):

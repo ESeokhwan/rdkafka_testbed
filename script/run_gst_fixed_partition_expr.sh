@@ -24,6 +24,7 @@ GST_TOPIC=""
 SINGLE_TOPIC=test_single_topic
 CREATE_TOPICS=0
 DELETE_TOPICS_AFTER=0
+CLEANUP_ONLY=0
 TOPIC_DELETE_TIMEOUT=120
 DRY_RUN=0
 RUN_HOOK=""
@@ -54,6 +55,7 @@ The existing producer app is used unchanged, asynchronously with acks=0.
   --single-topic NAME         Default: test_single_topic (one physical partition)
   --create-topics             Create missing topics without changing existing ones
   --delete-topics-after       Delete validated experiment topics when this sweep exits
+  --cleanup-only              Verify and delete existing selected topics; no measurements
   --topic-delete-timeout SEC  Per-topic deletion/list-confirmation timeout (120)
   --replication-factor N      Required source-topic replication factor (1)
   --producer PATH             Default: <project>/bin/single_topic_throughput_expr_producer
@@ -90,6 +92,7 @@ while (( $# > 0 )); do
         -h|--help) usage; exit 0 ;;
         --create-topics) CREATE_TOPICS=1; shift; continue ;;
         --delete-topics-after) DELETE_TOPICS_AFTER=1; shift; continue ;;
+        --cleanup-only) CLEANUP_ONLY=1; DELETE_TOPICS_AFTER=1; shift; continue ;;
         --dry-run) DRY_RUN=1; shift; continue ;;
     esac
     (( $# >= 2 )) || die "Missing value for $1"
@@ -118,6 +121,8 @@ while (( $# > 0 )); do
     esac
     shift 2
 done
+
+(( ! CLEANUP_ONLY || ! CREATE_TOPICS )) || die "--cleanup-only cannot be combined with --create-topics"
 
 positive_int() {
     [[ "$2" =~ ^[1-9][0-9]*$ ]] && (( ${#2} <= 10 )) && (( $2 <= 2147483647 )) || die "$1 must be an integer in 1..2147483647"
@@ -170,7 +175,7 @@ previous_clients=0
 for clients in "${CLIENT_COUNTS[@]}"; do
     positive_int clients "$clients"
     (( clients > previous_clients )) || die "clients must be strictly increasing"
-    (( clients >= required_clients )) || die "clients must be >= $required_clients to keep a fixed per-client rate"
+    (( CLEANUP_ONLY || clients >= required_clients )) || die "clients must be >= $required_clients to keep a fixed per-client rate"
     (( clients <= 2147483647 / MESSAGES_PER_CLIENT )) || die "C * messages-per-client exceeds the producer's --msg-cnt range"
     previous_clients=$clients
 done
@@ -178,15 +183,21 @@ done
 NOMINAL_CLIENT_RPS=$(awk -v ms="$INTERVAL_MS" 'BEGIN {printf "%.6f", 1000/ms}')
 NOMINAL_PRODUCE_S=$(awk -v n="$MESSAGES_PER_CLIENT" -v ms="$INTERVAL_MS" 'BEGIN {printf "%.6f", n*ms/1000}')
 TOTAL_RUNS=$((REPETITIONS * ${#CLIENT_COUNTS[@]} * ${#MODES[@]}))
-printf 'P=%s C=%s modes=%s interval_ms=%s nominal_client_rps=%s messages_per_client=%s repetitions=%s runs=%s\n' \
-    "$PARTITIONS" "$CLIENTS_CSV" "$MODES_CSV" "$INTERVAL_MS" "$NOMINAL_CLIENT_RPS" "$MESSAGES_PER_CLIENT" "$REPETITIONS" "$TOTAL_RUNS"
-echo "Nominal production time per run: $NOMINAL_PRODUCE_S s (count-based; actual time may differ)."
+if (( CLEANUP_ONLY )); then
+    echo "Cleanup only: verify and delete selected existing topics (P=$PARTITIONS modes=$MODES_CSV)."
+else
+    printf 'P=%s C=%s modes=%s interval_ms=%s nominal_client_rps=%s messages_per_client=%s repetitions=%s runs=%s\n' \
+        "$PARTITIONS" "$CLIENTS_CSV" "$MODES_CSV" "$INTERVAL_MS" "$NOMINAL_CLIENT_RPS" "$MESSAGES_PER_CLIENT" "$REPETITIONS" "$TOTAL_RUNS"
+    echo "Nominal production time per run: $NOMINAL_PRODUCE_S s (count-based; actual time may differ)."
+fi
 
 if (( ! DRY_RUN )); then
-    [[ -x "$PRODUCER" ]] || die "Producer executable not found: $PRODUCER"
     [[ -x "$TOPICS_COMMAND" ]] || die "Topic command not found: $TOPICS_COMMAND"
-    [[ -x "$EXTENSION_COMMAND" ]] || die "Broker measurement extension not found: $EXTENSION_COMMAND"
-    [[ -z "$RUN_HOOK" || -x "$RUN_HOOK" ]] || die "Run hook not executable: $RUN_HOOK"
+    if (( ! CLEANUP_ONLY )); then
+        [[ -x "$PRODUCER" ]] || die "Producer executable not found: $PRODUCER"
+        [[ -x "$EXTENSION_COMMAND" ]] || die "Broker measurement extension not found: $EXTENSION_COMMAND"
+        [[ -z "$RUN_HOOK" || -x "$RUN_HOOK" ]] || die "Run hook not executable: $RUN_HOOK"
+    fi
     open_files=$(ulimit -Sn)
     if [[ "$open_files" != unlimited ]] && (( open_files < 65536 )); then
         ulimit -Sn 65536 || echo "Could not raise the open-file limit; keeping $(ulimit -Sn)." >&2
@@ -206,6 +217,7 @@ if (( ! DRY_RUN )); then
         printf 'open_files_soft_limit\t%s\n' "$(ulimit -Sn)"
         printf 'run_hook\t%s\n' "$RUN_HOOK"
         printf 'delete_topics_after\t%s\ntopic_delete_timeout\t%s\n' "$DELETE_TOPICS_AFTER" "$TOPIC_DELETE_TIMEOUT"
+        printf 'cleanup_only\t%s\n' "$CLEANUP_ONLY"
     } > "$RESULTS_DIR/config.tsv" || die "Cannot write config"
     cp "${BASH_SOURCE[0]}" "$RESULTS_DIR/script.sh" || die "Cannot save script snapshot"
     echo "Results: $RESULTS_DIR"
@@ -481,6 +493,26 @@ run_experiment() {
 trap finish EXIT
 trap 'handle_signal 130' INT
 trap 'handle_signal 143' TERM
+
+if (( CLEANUP_ONLY )); then
+    cleanup_prepare_failed=0
+    for mode in "${MODES[@]}"; do
+        cleanup_partitions=$PARTITIONS
+        case "$mode" in
+            normal) topic=$NORMAL_TOPIC ;;
+            gst) topic=$GST_TOPIC ;;
+            single) topic=$SINGLE_TOPIC; cleanup_partitions=1 ;;
+        esac
+        run_dir="${RESULTS_DIR:-dry-run}/cleanup_$mode"
+        if (( ! DRY_RUN )) && ! mkdir -p "$run_dir"; then
+            cleanup_prepare_failed=1
+        elif ! prepare_topic "$mode" "$topic" "$cleanup_partitions" "$run_dir"; then
+            echo "Topic cleanup preparation failed: $topic ($TOPIC_FAILURE)" >&2
+            cleanup_prepare_failed=1
+        fi
+    done
+    exit "$cleanup_prepare_failed"
+fi
 
 for (( repetition=1; repetition<=REPETITIONS; repetition++ )); do
     for clients in "${CLIENT_COUNTS[@]}"; do
