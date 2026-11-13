@@ -24,6 +24,7 @@ GST_TOPIC=""
 SINGLE_TOPIC=test_single_topic
 CREATE_TOPICS=0
 DRY_RUN=0
+RUN_HOOK=""
 
 usage() {
     cat <<'EOF'
@@ -51,6 +52,7 @@ The existing producer app is used unchanged, asynchronously with acks=0.
   --start-barrier-delay SEC   Producer startup barrier delay (2)
   --drain-wait SEC            Wait after producer exit before broker rollout (20)
   --cooldown SEC              Wait after rollout before the next run (60)
+  --run-hook PATH             Optional before_produce/after_rollout callback
   --dry-run                   Print configuration and commands; no server access
   -h, --help                  Show this help
 
@@ -95,6 +97,7 @@ while (( $# > 0 )); do
         --start-barrier-delay) START_BARRIER_DELAY=$2 ;;
         --drain-wait) DRAIN_WAIT=$2 ;;
         --cooldown) COOLDOWN=$2 ;;
+        --run-hook) RUN_HOOK=$2 ;;
         *) die "Unknown option: $1" ;;
     esac
     shift 2
@@ -164,6 +167,7 @@ if (( ! DRY_RUN )); then
     [[ -x "$PRODUCER" ]] || die "Producer executable not found: $PRODUCER"
     [[ -x "$TOPICS_COMMAND" ]] || die "Topic command not found: $TOPICS_COMMAND"
     [[ -x "$EXTENSION_COMMAND" ]] || die "Broker measurement extension not found: $EXTENSION_COMMAND"
+    [[ -z "$RUN_HOOK" || -x "$RUN_HOOK" ]] || die "Run hook not executable: $RUN_HOOK"
     open_files=$(ulimit -Sn)
     if [[ "$open_files" != unlimited ]] && (( open_files < 65536 )); then
         ulimit -Sn 65536 || echo "Could not raise the open-file limit; keeping $(ulimit -Sn)." >&2
@@ -181,6 +185,7 @@ if (( ! DRY_RUN )); then
         printf 'replication_factor\t%s\ncreate_topics\t%s\nstart_barrier_delay\t%s\ndrain_wait\t%s\ncooldown\t%s\n' \
             "$REPLICATION_FACTOR" "$CREATE_TOPICS" "$START_BARRIER_DELAY" "$DRAIN_WAIT" "$COOLDOWN"
         printf 'open_files_soft_limit\t%s\n' "$(ulimit -Sn)"
+        printf 'run_hook\t%s\n' "$RUN_HOOK"
     } > "$RESULTS_DIR/config.tsv" || die "Cannot write config"
     cp "${BASH_SOURCE[0]}" "$RESULTS_DIR/script.sh" || die "Cannot save script snapshot"
     echo "Results: $RESULTS_DIR"
@@ -241,6 +246,12 @@ execute_rollout() {
     [[ -z "$ROLLOUT_FAILURES" ]]
 }
 
+run_hook() {
+    local phase=$1 run_dir=$2
+    [[ -z "$RUN_HOOK" ]] && return 0
+    run_logged "$run_dir/${phase}_hook.log" "$RUN_HOOK" "$phase" "$run_dir"
+}
+
 SUCCESS_COUNT=0
 FAILED_COUNT=0
 SKIPPED_COUNT=0
@@ -264,6 +275,8 @@ run_experiment() {
         reason=$TOPIC_FAILURE
     elif ! execute_rollout "$run_dir/prepare_metrics.log"; then
         reason="metrics_not_ready: $ROLLOUT_FAILURES"
+    elif ! run_hook before_produce "$run_dir"; then
+        reason=before_produce_hook_failed
     else
         run_logged "$run_dir/producer.log" "$PRODUCER" --broker "$BROKER" --prefix "$topic" --partition-cnt "$partitions" --client-cnt "$clients" --interval "$INTERVAL_MS" --interval-noise-stddev 0 --msg-cnt "$total_msgs" --msg-size "$MESSAGE_SIZE" --start-barrier-delay "$START_BARRIER_DELAY" --ignore-response --sample-log --tag-record --scrapable --verbose
         producer_exit=$?
@@ -273,6 +286,10 @@ run_experiment() {
         if ! execute_rollout "$run_dir/rollout.log"; then
             status=FAILED
             reason="${reason:+$reason; }$ROLLOUT_FAILURES"
+        fi
+        if ! run_hook after_rollout "$run_dir"; then
+            status=FAILED
+            reason="${reason:+$reason; }after_rollout_hook_failed"
         fi
         if (( ! DRY_RUN )); then sleep "$COOLDOWN"; fi
     fi
