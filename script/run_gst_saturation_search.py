@@ -102,14 +102,36 @@ def signature(path):
     return [stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns]
 
 
+def log_order(root, path):
+    relative = path.relative_to(root)
+    match = re.fullmatch(r"(.*?)(?:\.(\d+))?\.(csv|log)", relative.name, re.IGNORECASE)
+    if match:
+        base, index, extension = match.groups()
+        return (str(relative.parent), base, index is not None, int(index or 0), extension.lower(), relative.name)
+    return (str(relative.parent), relative.name, False, 0, "", relative.name)
+
+
 def log_files(root, pattern):
-    return sorted(path for path in root.glob(pattern) if path.is_file())
+    paths = {path for glob in ((pattern,) if pattern else ("*.csv", "*.log"))
+             for path in root.glob(glob) if path.is_file()}
+    selected = []
+    for path in sorted(paths, key=lambda path: log_order(root, path)):
+        try:
+            # Ignore unrelated active logs before snapshot/stability checks.
+            with path.open(encoding="utf-8-sig", errors="replace") as source:
+                first = next((line for line in source if line.strip()), "")
+            header = next(csv.reader([first], delimiter="\t" if "\t" in first else ","))
+            if set(COLUMNS).issubset(cell.strip() for cell in header):
+                selected.append(path)
+        except (FileNotFoundError, StopIteration, csv.Error):
+            continue
+    return selected
 
 
 def capture(phase, directory):
     """Called by the existing sweep at exact boundaries, not by a poll of app logs."""
     root = Path(os.environ["GST_SATURATION_LOG_DIR"])
-    pattern = os.environ["GST_SATURATION_CSV_GLOB"]
+    pattern = os.environ["GST_SATURATION_CSV_GLOB"] or None
     wait = float(os.environ["GST_SATURATION_CSV_WAIT"])
     stable = float(os.environ["GST_SATURATION_CSV_STABLE"])
     before_path = directory / "throughput_before.json"
@@ -125,6 +147,7 @@ def capture(phase, directory):
         before_path.write_text(json.dumps(before, indent=2) + "\n")
         return
     before = json.loads(before_path.read_text())
+    before_identity = {tuple(record["signature"][:2]): record for record in before.values()}
     deadline = time.monotonic() + wait
     previous = None
     stable_since = time.monotonic()
@@ -139,12 +162,20 @@ def capture(phase, directory):
             previous, stable_since = current, now
         if changed and now - stable_since >= stable:
             try:
-                samples, archives = [], []
+                samples, archives, seen = [], [], set()
                 for path, stat in changed:
+                    identity = tuple(stat[:2])
+                    if identity in seen:
+                        continue
+                    seen.add(identity)
                     data = path.read_bytes()
                     if signature(path) != stat:
                         raise SearchError("CSV is still being written: {}".format(path))
-                    old = before.get(str(path.relative_to(root)))
+                    old = before_identity.get(identity)
+                    original_name = before.get(str(path.relative_to(root)))
+                    renamed = old and (not original_name or tuple(original_name["signature"][:2]) != identity)
+                    if renamed and hashlib.sha256(data).hexdigest() == old["sha256"]:
+                        continue  # Existing content renamed by rollover, not a new sample.
                     kind = "new_or_rewritten"
                     if old and old["signature"][:2] == stat[:2] and len(data) > old["signature"][2]:
                         old_size = old["signature"][2]
@@ -205,8 +236,8 @@ def parse_args():
     p.add_argument("--growth-factor", type=finite_float, default=2)
     p.add_argument("--min-ratio", type=finite_float, default=0.9, help="saturated when measured/theoretical < this ratio (0.9)")
     p.add_argument("--max-probes", type=positive_int, default=32, help="maximum unique client counts per mode/P")
-    p.add_argument("--broker-log-dir", type=Path, default=Path("broker"), help="locally readable/mounted broker CSV directory (./broker)")
-    p.add_argument("--csv-glob", default="*.[0-9]*.csv", help="one throughput stream's numbered rollout CSVs")
+    p.add_argument("--broker-log-dir", type=Path, default=Path("broker"), help="locally readable/mounted broker log directory (./broker)")
+    p.add_argument("--csv-glob", help="optional throughput filename glob; default includes unnumbered and numbered .csv/.log files")
     p.add_argument("--csv-wait", type=finite_float, default=10)
     p.add_argument("--csv-stable", type=finite_float, default=0.5)
     p.add_argument("--broker", default="166.104.110.13:9092")
@@ -247,7 +278,7 @@ def parse_args():
         p.error("invalid CSV timing, replication factor or negative wait")
     if a.probe_timeout is not None and a.probe_timeout <= 0:
         p.error("probe-timeout must be positive")
-    if Path(a.csv_glob).is_absolute() or ".." in Path(a.csv_glob).parts:
+    if a.csv_glob == "" or a.csv_glob is not None and (Path(a.csv_glob).is_absolute() or ".." in Path(a.csv_glob).parts):
         p.error("csv-glob must stay within broker-log-dir")
     for name in ("broker_log_dir", "producer", "kafka_bin", "runner", "output_root"):
         setattr(a, name, getattr(a, name).resolve())
@@ -336,7 +367,7 @@ class Search:
         self.probes.append(row)
         print("{} P={} C={} ({})".format(mode, partitions, clients, phase), flush=True)
         env = dict(os.environ, GST_SATURATION_LOG_DIR=str(self.args.broker_log_dir),
-                   GST_SATURATION_CSV_GLOB=self.args.csv_glob, GST_SATURATION_CSV_WAIT=str(self.args.csv_wait),
+                   GST_SATURATION_CSV_GLOB=self.args.csv_glob or "", GST_SATURATION_CSV_WAIT=str(self.args.csv_wait),
                    GST_SATURATION_CSV_STABLE=str(self.args.csv_stable))
         try:
             command = self.command(mode, partitions, clients, directory)
