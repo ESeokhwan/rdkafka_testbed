@@ -23,8 +23,16 @@ NORMAL_TOPIC=""
 GST_TOPIC=""
 SINGLE_TOPIC=test_single_topic
 CREATE_TOPICS=0
+DELETE_TOPICS_AFTER=0
+TOPIC_DELETE_TIMEOUT=120
 DRY_RUN=0
 RUN_HOOK=""
+READY_TOPICS=()
+ACTIVE_COMMAND_PID=""
+CLEANUP_WATCHDOG_PID=""
+CLEANUP_TIMED_OUT=0
+CLEANUP_INTERRUPTED=0
+CLEANUP_SIGNAL_EXIT=0
 
 usage() {
     cat <<'EOF'
@@ -44,7 +52,9 @@ The existing producer app is used unchanged, asynchronously with acks=0.
   --normal-topic NAME         Default: test_topic_p<P>
   --gst-topic NAME            Default: test_gs_topic_p<P>
   --single-topic NAME         Default: test_single_topic (one physical partition)
-  --create-topics             Create missing topics; never delete existing data
+  --create-topics             Create missing topics without changing existing ones
+  --delete-topics-after       Delete validated experiment topics when this sweep exits
+  --topic-delete-timeout SEC  Per-topic deletion/list-confirmation timeout (120)
   --replication-factor N      Required source-topic replication factor (1)
   --producer PATH             Default: <project>/bin/single_topic_throughput_expr_producer
   --kafka-bin DIR             Default: <project>/../kafka_sandbox/bin
@@ -66,6 +76,10 @@ Each run resets broker metrics, runs the producer, then rolls out broker logs.
 SUCCESS/FAILED/SKIPPED, command exit codes and output are saved per run.
 SUCCESS means commands completed; it does not certify delivery or capacity.
 Any failed/skipped run yields exit 1 only after all remaining runs are tried.
+Topic cleanup is opt-in, also deletes matching pre-existing experiment topics,
+and uses Bash plus the existing Kafka CLI. Results and measurement files are preserved.
+Cleanup waits for metadata removal; physical deletion is asynchronous. The
+shared __global_sequence_index is retained and cannot be a cleanup target.
 EOF
 }
 
@@ -75,6 +89,7 @@ while (( $# > 0 )); do
     case "$1" in
         -h|--help) usage; exit 0 ;;
         --create-topics) CREATE_TOPICS=1; shift; continue ;;
+        --delete-topics-after) DELETE_TOPICS_AFTER=1; shift; continue ;;
         --dry-run) DRY_RUN=1; shift; continue ;;
     esac
     (( $# >= 2 )) || die "Missing value for $1"
@@ -98,6 +113,7 @@ while (( $# > 0 )); do
         --drain-wait) DRAIN_WAIT=$2 ;;
         --cooldown) COOLDOWN=$2 ;;
         --run-hook) RUN_HOOK=$2 ;;
+        --topic-delete-timeout) TOPIC_DELETE_TIMEOUT=$2 ;;
         *) die "Unknown option: $1" ;;
     esac
     shift 2
@@ -119,6 +135,8 @@ positive_int replication-factor "$REPLICATION_FACTOR"
 nonnegative_int start-barrier-delay "$START_BARRIER_DELAY"
 nonnegative_int drain-wait "$DRAIN_WAIT"
 nonnegative_int cooldown "$COOLDOWN"
+[[ "$TOPIC_DELETE_TIMEOUT" =~ ^([0-9]+([.][0-9]*)?|[.][0-9]+)$ ]] && \
+    awk -v n="$TOPIC_DELETE_TIMEOUT" 'BEGIN {exit !(n > 0 && n < 1e9)}' || die "topic-delete-timeout must be positive and < 1e9 seconds"
 [[ "$INTERVAL_MS" =~ ^([0-9]+([.][0-9]*)?|[.][0-9]+)$ ]] && \
     awk -v n="$INTERVAL_MS" 'BEGIN {exit !(n > 0 && n < 1e9)}' || die "interval must be a positive number of milliseconds"
 [[ -n "$BROKER" && -n "$OUTPUT_ROOT" ]] || die "broker and output-root must not be empty"
@@ -143,6 +161,7 @@ for mode in "${MODES[@]}"; do
     esac
     [[ "$seen_modes" != *",$mode,"* ]] || die "Duplicate mode: $mode"
     [[ "$topic" =~ ^[a-zA-Z0-9._-]+$ ]] && [[ "$topic" != . && "$topic" != .. ]] || die "Invalid topic name: $topic"
+    (( ! DELETE_TOPICS_AFTER )) || [[ "$topic" != __global_sequence_index ]] || die "The shared GST index cannot be a cleanup target"
     [[ "$seen_topics" != *",$topic,"* ]] || die "Selected modes must use different topics"
     seen_modes="$seen_modes$mode,"
     seen_topics="$seen_topics$topic,"
@@ -186,27 +205,63 @@ if (( ! DRY_RUN )); then
             "$REPLICATION_FACTOR" "$CREATE_TOPICS" "$START_BARRIER_DELAY" "$DRAIN_WAIT" "$COOLDOWN"
         printf 'open_files_soft_limit\t%s\n' "$(ulimit -Sn)"
         printf 'run_hook\t%s\n' "$RUN_HOOK"
+        printf 'delete_topics_after\t%s\ntopic_delete_timeout\t%s\n' "$DELETE_TOPICS_AFTER" "$TOPIC_DELETE_TIMEOUT"
     } > "$RESULTS_DIR/config.tsv" || die "Cannot write config"
     cp "${BASH_SOURCE[0]}" "$RESULTS_DIR/script.sh" || die "Cannot save script snapshot"
     echo "Results: $RESULTS_DIR"
 fi
 
-trap 'echo "Interrupted; stopping the sweep." >&2; exit 130' INT
-trap 'echo "Terminated; stopping the sweep." >&2; exit 143' TERM
-
 print_command() { printf 'COMMAND: '; printf '%q ' "$@"; printf '\n'; }
 utc_now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
+stop_active_command() {
+    [[ -n "$ACTIVE_COMMAND_PID" ]] || return 0
+    local command_pid=$ACTIVE_COMMAND_PID attempt
+    # Each logged command and its tee pipeline share a dedicated job group.
+    kill -TERM -- "-$command_pid" 2>/dev/null || :
+    for (( attempt=0; attempt<50; attempt++ )); do
+        kill -0 -- "-$command_pid" 2>/dev/null || break
+        sleep 0.1
+    done
+    kill -KILL -- "-$command_pid" 2>/dev/null || :
+    wait "$command_pid" 2>/dev/null || :
+    ACTIVE_COMMAND_PID=""
+}
+
+handle_signal() {
+    trap '' INT TERM
+    echo "Interrupted; stopping the active command before topic cleanup." >&2
+    stop_active_command
+    exit "$1"
+}
+
 run_logged() {
-    local log_file=$1
+    local log_file=$1 command_exit
     shift
     if (( DRY_RUN )); then print_command "$@"; return 0; fi
+    (( ! CLEANUP_TIMED_OUT && ! CLEANUP_INTERRUPTED )) || return 124
     print_command "$@" >> "$log_file" || return 1
-    "$@" 2>&1 | tee -a "$log_file"
-    local pipeline_status=("${PIPESTATUS[@]}")
-    printf 'EXIT_CODE: %s\n' "${pipeline_status[0]}" >> "$log_file" || return 1
-    if (( pipeline_status[0] != 0 )); then return "${pipeline_status[0]}"; fi
-    return "${pipeline_status[1]}"
+    # Job control gives this command a group; the nested pipeline stays in it.
+    set -m
+    (
+        set +m
+        trap - INT TERM USR1
+        "$@" 2>&1 | tee -a "$log_file"
+        pipeline_status=("${PIPESTATUS[@]}")
+        printf 'EXIT_CODE: %s\n' "${pipeline_status[0]}" >> "$log_file" || exit 1
+        if (( pipeline_status[0] != 0 )); then exit "${pipeline_status[0]}"; fi
+        exit "${pipeline_status[1]}"
+    ) &
+    ACTIVE_COMMAND_PID=$!
+    set +m
+    if (( CLEANUP_TIMED_OUT || CLEANUP_INTERRUPTED )); then
+        stop_active_command
+        return 124
+    fi
+    wait "$ACTIVE_COMMAND_PID" 2>/dev/null
+    command_exit=$?
+    ACTIVE_COMMAND_PID=""
+    return "$command_exit"
 }
 
 prepare_topic() {
@@ -232,6 +287,125 @@ prepare_topic() {
             [[ "$mode" == gst ]] || { TOPIC_FAILURE=unexpected_gst_enabled; return 1; } ;;
         *) [[ "$mode" != gst ]] || { TOPIC_FAILURE=gst_not_enabled; return 1; } ;;
     esac
+    # Only verified source topics become cleanup targets, even on interruption.
+    printf '%s\t%s\t%s\n' "$mode" "$topic" "$partitions" > "$run_dir/topic_ready.tsv" || {
+        TOPIC_FAILURE=topic_ready_write_failed; return 1;
+    }
+    local ready
+    for ready in "${READY_TOPICS[@]}"; do [[ "$ready" == "$topic" ]] && return 0; done
+    READY_TOPICS+=("$topic")
+}
+
+stop_cleanup_watchdog() {
+    if [[ -n "$CLEANUP_WATCHDOG_PID" ]]; then
+        kill -TERM "$CLEANUP_WATCHDOG_PID" 2>/dev/null || :
+        wait "$CLEANUP_WATCHDOG_PID" 2>/dev/null || :
+        CLEANUP_WATCHDOG_PID=""
+    fi
+}
+
+start_cleanup_watchdog() {
+    CLEANUP_TIMED_OUT=0
+    (
+        timer_pid=""
+        trap '[[ -z "$timer_pid" ]] || kill "$timer_pid" 2>/dev/null; wait "$timer_pid" 2>/dev/null; exit 0' INT TERM
+        sleep "$TOPIC_DELETE_TIMEOUT" &
+        timer_pid=$!
+        wait "$timer_pid" || exit 0
+        kill -USR1 "$$" 2>/dev/null
+    ) &
+    CLEANUP_WATCHDOG_PID=$!
+}
+
+topic_delete_timeout() {
+    CLEANUP_TIMED_OUT=1
+    stop_active_command
+}
+
+interrupt_cleanup() {
+    trap '' INT TERM
+    CLEANUP_INTERRUPTED=1
+    CLEANUP_SIGNAL_EXIT=$1
+    stop_active_command
+    stop_cleanup_watchdog
+}
+
+cleanup_topics() {
+    (( DELETE_TOPICS_AFTER )) || return 0
+    local mode topic ready prepared status reason started_at log_file list_file command_exit
+    local cleanup_exit=0 report="${RESULTS_DIR:-dry-run}/topic_cleanup.tsv"
+    if (( ! DRY_RUN )); then
+        printf 'topic\tstatus\treason\tstarted_at\tfinished_at\tlog_file\n' > "$report" || return 1
+    fi
+    trap topic_delete_timeout USR1
+    trap 'interrupt_cleanup 130' INT
+    trap 'interrupt_cleanup 143' TERM
+    for mode in "${MODES[@]}"; do
+        case "$mode" in
+            normal) topic=$NORMAL_TOPIC ;;
+            gst) topic=$GST_TOPIC ;;
+            single) topic=$SINGLE_TOPIC ;;
+        esac
+        if (( DRY_RUN )); then
+            echo "After this sweep, delete $topic if its preparation checks passed:"
+            print_command "$TOPICS_COMMAND" --bootstrap-server "$BROKER" --delete --if-exists --topic "^${topic//./\\.}$"
+            print_command "$TOPICS_COMMAND" --bootstrap-server "$BROKER" --list
+            continue
+        fi
+        prepared=0
+        for ready in "${READY_TOPICS[@]}"; do [[ "$ready" == "$topic" ]] && prepared=1; done
+        status=SKIPPED_NOT_PREPARED reason=topic_never_passed_preparation_checks
+        started_at=$(utc_now)
+        log_file="$RESULTS_DIR/topic_cleanup_$topic.log"
+        list_file="$RESULTS_DIR/.topic_list_$topic.tmp"
+        if (( prepared )); then
+            status=ERROR reason=""
+            echo "Deleting experiment topic: $topic"
+            start_cleanup_watchdog
+            # Kafka interprets --topic as a regex. Dots are the only regex
+            # metacharacters allowed by the topic-name validation above.
+            run_logged "$log_file" "$TOPICS_COMMAND" --bootstrap-server "$BROKER" --delete --if-exists --topic "^${topic//./\\.}$"
+            command_exit=$?
+            if (( command_exit != 0 )); then
+                reason="delete_exit_$command_exit"
+            else
+                while (( ! CLEANUP_TIMED_OUT && ! CLEANUP_INTERRUPTED )); do
+                    run_logged "$log_file" "$TOPICS_COMMAND" --bootstrap-server "$BROKER" --list > "$list_file"
+                    command_exit=$?
+                    if (( command_exit != 0 )); then reason="list_exit_$command_exit"; break; fi
+                    if ! grep -Fxq -- "$topic" "$list_file"; then status=DELETED; break; fi
+                    run_logged "$log_file" sleep 1
+                done
+            fi
+            stop_cleanup_watchdog
+            if (( CLEANUP_INTERRUPTED )); then
+                status=INTERRUPTED reason=controller_interrupted_during_cleanup
+            elif (( CLEANUP_TIMED_OUT )); then
+                status=ERROR reason=topic_delete_timeout
+            fi
+            rm -f "$list_file"
+        fi
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$topic" "$status" "$reason" "$started_at" "$(utc_now)" "$log_file" >> "$report" || cleanup_exit=1
+        if [[ "$status" == ERROR ]]; then
+            echo "Topic cleanup failed: $topic ($reason); see $log_file" >&2
+            cleanup_exit=1
+        fi
+        (( CLEANUP_INTERRUPTED )) && break
+    done
+    stop_cleanup_watchdog
+    trap '' USR1
+    if (( CLEANUP_INTERRUPTED )); then return "$CLEANUP_SIGNAL_EXIT"; fi
+    return "$cleanup_exit"
+}
+
+finish() {
+    local exit_code=$?
+    trap - EXIT
+    stop_active_command
+    cleanup_topics
+    local cleanup_exit=$?
+    if (( exit_code == 0 && cleanup_exit != 0 )); then exit_code=$cleanup_exit; fi
+    exit "$exit_code"
 }
 
 execute_rollout() {
@@ -303,6 +477,10 @@ run_experiment() {
     (IFS=$'\t'; printf '%s\n' "${row[*]}") >> "$SUMMARY" || die "Cannot append summary"
     echo "=== $run_id: $status ${reason:+($reason)} ==="
 }
+
+trap finish EXIT
+trap 'handle_signal 130' INT
+trap 'handle_signal 143' TERM
 
 for (( repetition=1; repetition<=REPETITIONS; repetition++ )); do
     for clients in "${CLIENT_COUNTS[@]}"; do

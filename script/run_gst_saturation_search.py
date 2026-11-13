@@ -256,6 +256,10 @@ def parse_args():
     p.add_argument("--gst-topic-template", default="test_gs_topic_p{p}")
     p.add_argument("--single-topic", default="test_single_topic")
     p.add_argument("--create-topics", action="store_true")
+    p.add_argument("--delete-topics-after", action="store_true",
+                   help="ask the fixed-partition runner to delete experiment topics after each tested client count")
+    p.add_argument("--topic-delete-timeout", type=finite_float, default=120,
+                   help="seconds allowed for topic deletion and disappearance from the topic list (120)")
     p.add_argument("--output-root", type=Path, default=ROOT / "out/gst_saturation")
     p.add_argument("--probe-timeout", type=finite_float, help="seconds per complete candidate, including repetitions/cooldown")
     p.add_argument("--dry-run", action="store_true", help="print the adaptive policy and initial commands; no experiments/files")
@@ -278,6 +282,10 @@ def parse_args():
         p.error("invalid CSV timing, replication factor or negative wait")
     if a.probe_timeout is not None and a.probe_timeout <= 0:
         p.error("probe-timeout must be positive")
+    if not 0 < a.topic_delete_timeout < 1e9:
+        p.error("topic-delete-timeout must be positive and < 1e9 seconds")
+    if a.delete_topics_after and not a.create_topics:
+        p.error("--delete-topics-after requires --create-topics to recreate topics for the next client count")
     if a.csv_glob == "" or a.csv_glob is not None and (Path(a.csv_glob).is_absolute() or ".." in Path(a.csv_glob).parts):
         p.error("csv-glob must stay within broker-log-dir")
     for name in ("broker_log_dir", "producer", "kafka_bin", "runner", "output_root"):
@@ -295,12 +303,15 @@ def parse_args():
             p.error("invalid topic template: {}".format(error))
         if not re.fullmatch(r"[A-Za-z0-9._-]{1,249}", topic) or topic in (".", ".."):
             p.error("topic template must produce a valid Kafka topic name")
+        if a.delete_topics_after and topic == "__global_sequence_index":
+            p.error("the shared GST index cannot be used as a cleanup target")
     if a.max_clients > 2147483647 // a.messages_per_client:
         p.error("max-clients * messages-per-client exceeds the app's --msg-cnt range")
     if not math.isfinite(a.max_clients * 1000 / a.interval):
         p.error("theoretical throughput must be finite")
     if a.probe_timeout is None:
-        a.probe_timeout = max(300, a.repetitions * (a.messages_per_client * a.interval / 1000 + a.start_barrier_delay + a.drain_wait + a.cooldown + a.csv_wait + 120))
+        a.probe_timeout = max(300, a.repetitions * (a.messages_per_client * a.interval / 1000 + a.start_barrier_delay + a.drain_wait + a.cooldown + a.csv_wait + 120)
+                              + (a.topic_delete_timeout if a.delete_topics_after else 0))
     return a
 
 
@@ -309,10 +320,13 @@ class Search:
         self.args, self.output, self.child = args, None, None
         self.probes, self.boundaries = [], []
 
+    def topic(self, mode, partitions):
+        return self.args.single_topic if mode == "single" else getattr(self.args, mode + "_topic_template").format(p=partitions)
+
     def command(self, mode, partitions, clients, directory):
         a = self.args
         topic_option = "--single-topic" if mode == "single" else "--{}-topic".format(mode)
-        topic = a.single_topic if mode == "single" else getattr(a, mode + "_topic_template").format(p=partitions)
+        topic = self.topic(mode, partitions)
         command = ["/bin/bash", str(a.runner), "--broker", a.broker, "--partitions", str(partitions),
                    "--clients", str(clients), "--modes", mode, "--interval", str(a.interval),
                    "--messages-per-client", str(a.messages_per_client), "--message-size", str(a.message_size),
@@ -323,6 +337,8 @@ class Search:
                    "--run-hook", str(Path(__file__).resolve())]
         if a.create_topics:
             command.append("--create-topics")
+        if a.delete_topics_after:
+            command.extend(["--delete-topics-after", "--topic-delete-timeout", str(a.topic_delete_timeout)])
         return command
 
     def save(self):
@@ -342,7 +358,9 @@ class Search:
             except ProcessLookupError:
                 pass
             try:
-                self.child.wait(timeout=5)
+                # Give the runner time to stop its producer and perform EXIT
+                # cleanup before forcibly killing the owned runner group.
+                self.child.wait(timeout=self.args.topic_delete_timeout + 10 if self.args.delete_topics_after else 5)
             except subprocess.TimeoutExpired:
                 pass
             # The runner may exit before one of its pipeline children does.
@@ -352,6 +370,23 @@ class Search:
                 pass
             self.child.wait()
             self.child = None
+
+    def read_cleanup(self, directory, row):
+        if not self.args.delete_topics_after:
+            return
+        reports = list((directory / "runner").glob("*/topic_cleanup.tsv"))
+        if len(reports) == 1:
+            try:
+                with reports[0].open() as source:
+                    topics = list(csv.DictReader(source, delimiter="\t"))
+                statuses = ("INTERRUPTED", "ERROR", "DELETED", "SKIPPED_NOT_PREPARED")
+                if not topics or any(item["status"] not in statuses for item in topics):
+                    raise ValueError("missing or invalid topic cleanup rows")
+                status = next(status for status in statuses if any(item["status"] == status for item in topics))
+                row.update(topic_cleanup_status=status, topic_cleanup_log=str(reports[0]),
+                           topic_cleanup_reason="; ".join(item["reason"] for item in topics if item["reason"]))
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                row.update(topic_cleanup_status="ERROR", topic_cleanup_reason="invalid runner cleanup report: {}".format(error))
 
     def probe(self, mode, partitions, clients, phase, cache):
         if clients in cache:
@@ -363,6 +398,8 @@ class Search:
         row = dict(mode=mode, partitions=partitions, clients=clients, search_phase=phase, status="ERROR",
                    theoretical_throughput_req_per_sec=clients * 1000 / self.args.interval,
                    average_throughput_req_per_sec=None, achieved_ratio=None, saturated=None,
+                   topic_cleanup_status="NOT_REPORTED" if self.args.delete_topics_after else "DISABLED",
+                   topic_cleanup_reason="",
                    started_at=utc_now(), log_dir=str(directory), reason="")
         self.probes.append(row)
         print("{} P={} C={} ({})".format(mode, partitions, clients, phase), flush=True)
@@ -385,9 +422,13 @@ class Search:
                 raise SearchError("expected exactly one runner summary; see runner.log")
             with summaries[0].open() as source:
                 runs = list(csv.DictReader(source, delimiter="\t"))
-            if code or len(runs) != self.args.repetitions or any(run["status"] != "SUCCESS" for run in runs):
+            self.read_cleanup(directory, row)
+            cleanup_only_failure = code == 1 and row["topic_cleanup_status"] == "ERROR"
+            if (code and not cleanup_only_failure) or len(runs) != self.args.repetitions or any(run["status"] != "SUCCESS" for run in runs):
                 details = "; ".join(run.get("reason", "") for run in runs if run["status"] != "SUCCESS")
                 raise SearchError("runner exit {}: {}".format(code, details or "incomplete repetitions"))
+            if row["topic_cleanup_status"] == "NOT_REPORTED":
+                raise SearchError("runner did not report topic cleanup")
             samples, files = [], []
             for run in runs:
                 captured = json.loads((Path(run["log_dir"]) / "throughput.json").read_text())
@@ -415,6 +456,8 @@ class Search:
             row.update(status="INTERRUPTED", reason="controller_interrupted")
             raise
         finally:
+            self.stop_child()
+            self.read_cleanup(directory, row)
             row["finished_at"] = utc_now()
             self.save()
 
@@ -426,6 +469,7 @@ class Search:
         boundary = dict(mode=mode, partitions=partitions, client_step=STEP, min_ratio=a.min_ratio,
                         status="ERROR", last_good_clients=None, first_saturated_clients=None,
                         boundary_gap_clients=None, probes=0, reason="")
+        interrupted = False
         try:
             point = self.probe(mode, partitions, start, "coarse", cache)
             if point["saturated"]:
@@ -455,6 +499,9 @@ class Search:
             boundary.update(status="FOUND" if low is not None and high is not None else "AT_OR_BELOW_MINIMUM" if high is not None else "NOT_FOUND_WITHIN_LIMIT")
         except SearchError as error:
             boundary["reason"] = str(error)
+        except KeyboardInterrupt:
+            boundary.update(status="INTERRUPTED", reason="controller_interrupted")
+            interrupted = True
         boundary.update(last_good_clients=low, first_saturated_clients=high,
                         boundary_gap_clients=high - low if high is not None and low is not None else None,
                         probes=len(cache), probe_attempts=sum(1 for r in self.probes if r["mode"] == mode and r["partitions"] == partitions),
@@ -463,7 +510,15 @@ class Search:
             boundary[prefix + "_average_throughput"] = cache[clients]["average_throughput_req_per_sec"] if clients in cache else None
         self.boundaries.append(boundary)
         self.save()
+        points = [row for row in self.probes if row["mode"] == mode and row["partitions"] == partitions]
+        cleanup_status = next((status for status in ("ERROR", "INTERRUPTED", "NOT_REPORTED", "DELETED", "SKIPPED_NOT_PREPARED", "DISABLED")
+                               if any(row["topic_cleanup_status"] == status for row in points)), "NOT_REPORTED")
+        boundary.update(topic_cleanup_status=cleanup_status,
+                        topic_cleanup_reason="; ".join(dict.fromkeys(row["topic_cleanup_reason"] for row in points if row["topic_cleanup_reason"])))
+        self.save()
         print("  boundary: {} last_good={} first_saturated={}".format(boundary["status"], low, high), flush=True)
+        if interrupted or cleanup_status == "INTERRUPTED":
+            raise KeyboardInterrupt
 
     def run(self):
         a = self.args
@@ -474,6 +529,8 @@ class Search:
                 start = min(a.max_clients, max(ceil_grid(partitions), ceil_grid(a.start_clients)))
                 print("{} P={}: start C={}, grow x{}, cap C={}; then binary search".format(mode, partitions, start, a.growth_factor, a.max_clients))
                 print(" ".join(shlex.quote(part) for part in self.command(mode, partitions, start, a.output_root / "dry-run")))
+                if a.delete_topics_after:
+                    print("  runner deletes validated topic {} after each C, including repetitions (timeout {}s)".format(self.topic(mode, partitions), a.topic_delete_timeout))
             return 0
         for executable in (a.runner, a.producer, a.kafka_bin / "kafka-topics.sh", a.kafka_bin / "kafka-broker-extension.sh", Path(__file__).resolve()):
             if not executable.is_file() or not os.access(str(executable), os.X_OK):
@@ -488,7 +545,7 @@ class Search:
         print("Results: {}".format(self.output), flush=True)
         for mode, partitions in a.combinations:
             self.search(mode, partitions)
-        return 1 if any(result["status"] == "ERROR" for result in self.boundaries) else 0
+        return 1 if any(result["status"] == "ERROR" or result["topic_cleanup_status"] == "ERROR" for result in self.boundaries) else 0
 
 
 def main():
