@@ -28,6 +28,8 @@ CLEANUP_ONLY=0
 TOPIC_DELETE_TIMEOUT=120
 DRY_RUN=0
 RUN_HOOK=""
+RECORD_PREFIX=""
+SAMPLE_LOG=1
 READY_TOPICS=()
 ACTIVE_COMMAND_PID=""
 CLEANUP_WATCHDOG_PID=""
@@ -65,6 +67,8 @@ The existing producer app is used unchanged, asynchronously with acks=0.
   --drain-wait SEC            Wait after producer exit before broker rollout (20)
   --cooldown SEC              Wait after rollout before the next run (60)
   --run-hook PATH             Optional before_produce/after_rollout callback
+  --record-prefix NAME        Optional record/client ID prefix; topic stays unchanged
+  --no-sample-log             Tag/log all clients (default: sample client 0)
   --dry-run                   Print configuration and commands; no server access
   -h, --help                  Show this help
 
@@ -94,6 +98,7 @@ while (( $# > 0 )); do
         --delete-topics-after) DELETE_TOPICS_AFTER=1; shift; continue ;;
         --cleanup-only) CLEANUP_ONLY=1; DELETE_TOPICS_AFTER=1; shift; continue ;;
         --dry-run) DRY_RUN=1; shift; continue ;;
+        --no-sample-log) SAMPLE_LOG=0; shift; continue ;;
     esac
     (( $# >= 2 )) || die "Missing value for $1"
     case "$1" in
@@ -116,6 +121,7 @@ while (( $# > 0 )); do
         --drain-wait) DRAIN_WAIT=$2 ;;
         --cooldown) COOLDOWN=$2 ;;
         --run-hook) RUN_HOOK=$2 ;;
+        --record-prefix) RECORD_PREFIX=$2 ;;
         --topic-delete-timeout) TOPIC_DELETE_TIMEOUT=$2 ;;
         *) die "Unknown option: $1" ;;
     esac
@@ -145,6 +151,7 @@ nonnegative_int cooldown "$COOLDOWN"
 [[ "$INTERVAL_MS" =~ ^([0-9]+([.][0-9]*)?|[.][0-9]+)$ ]] && \
     awk -v n="$INTERVAL_MS" 'BEGIN {exit !(n > 0 && n < 1e9)}' || die "interval must be a positive number of milliseconds"
 [[ -n "$BROKER" && -n "$OUTPUT_ROOT" ]] || die "broker and output-root must not be empty"
+[[ -z "$RECORD_PREFIX" || "$RECORD_PREFIX" =~ ^[a-zA-Z0-9._-]+$ ]] || die "Invalid record-prefix: $RECORD_PREFIX"
 [[ "$CLIENTS_CSV" =~ ^[0-9]+(,[0-9]+)*$ ]] || die "clients must be comma-separated positive integers"
 [[ "$MODES_CSV" =~ ^[a-z]+(,[a-z]+)*$ ]] || die "modes must be comma-separated names"
 IFS=',' read -r -a CLIENT_COUNTS <<< "$CLIENTS_CSV"
@@ -216,6 +223,7 @@ if (( ! DRY_RUN )); then
             "$REPLICATION_FACTOR" "$CREATE_TOPICS" "$START_BARRIER_DELAY" "$DRAIN_WAIT" "$COOLDOWN"
         printf 'open_files_soft_limit\t%s\n' "$(ulimit -Sn)"
         printf 'run_hook\t%s\n' "$RUN_HOOK"
+        printf 'record_prefix\t%s\nsample_log\t%s\n' "$RECORD_PREFIX" "$SAMPLE_LOG"
         printf 'delete_topics_after\t%s\ntopic_delete_timeout\t%s\n' "$DELETE_TOPICS_AFTER" "$TOPIC_DELETE_TIMEOUT"
         printf 'cleanup_only\t%s\n' "$CLEANUP_ONLY"
     } > "$RESULTS_DIR/config.tsv" || die "Cannot write config"
@@ -464,7 +472,11 @@ run_experiment() {
     elif ! run_hook before_produce "$run_dir"; then
         reason=before_produce_hook_failed
     else
-        run_logged "$run_dir/producer.log" "$PRODUCER" --broker "$BROKER" --prefix "$topic" --partition-cnt "$partitions" --client-cnt "$clients" --interval "$INTERVAL_MS" --interval-noise-stddev 0 --msg-cnt "$total_msgs" --msg-size "$MESSAGE_SIZE" --start-barrier-delay "$START_BARRIER_DELAY" --ignore-response --sample-log --tag-record --scrapable --verbose
+        local producer_command=("$PRODUCER" --broker "$BROKER" --prefix "${RECORD_PREFIX:-$topic}" --partition-cnt "$partitions" --client-cnt "$clients" --interval "$INTERVAL_MS" --interval-noise-stddev 0 --msg-cnt "$total_msgs" --msg-size "$MESSAGE_SIZE" --start-barrier-delay "$START_BARRIER_DELAY" --ignore-response)
+        if (( SAMPLE_LOG )); then producer_command+=(--sample-log); fi
+        producer_command+=(--tag-record --scrapable --verbose)
+        if [[ -n "$RECORD_PREFIX" ]]; then producer_command+=(--topic-name "$topic"); fi
+        run_logged "$run_dir/producer.log" "${producer_command[@]}"
         producer_exit=$?
         status=SUCCESS
         if (( producer_exit != 0 )); then status=FAILED; reason="producer_exit_$producer_exit"; fi
