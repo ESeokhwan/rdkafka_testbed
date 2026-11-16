@@ -29,6 +29,10 @@ class RunError(Exception):
     pass
 
 
+class CleanupError(RunError):
+    pass
+
+
 class Cancelled(BaseException):
     pass
 
@@ -50,11 +54,18 @@ def seconds(value):
     return result
 
 
+def client_counts(value):
+    counts = [positive_int(part.strip()) for part in value.split(",")]
+    if any(previous >= current for previous, current in zip(counts, counts[1:])):
+        raise argparse.ArgumentTypeError("A client counts must be distinct and strictly increasing")
+    return counts
+
+
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__, epilog="B always uses one client and one ordinary partition. No warmup or B metrics collector is required.")
     p.add_argument("--broker", default="166.104.110.13:9092")
     p.add_argument("--partitions", type=positive_int, default=16, help="A normal/GST partition count")
-    p.add_argument("--a-clients", type=positive_int, default=160)
+    p.add_argument("--a-clients", type=client_counts, default="160", help="increasing A client counts, e.g. 16,32,64,128,160")
     p.add_argument("--a-interval", type=seconds, default=3, help="milliseconds per A client")
     p.add_argument("--b-interval", type=seconds, default=10, help="milliseconds per B client")
     p.add_argument("--b-messages-per-client", type=positive_int, default=6000, help="B attempts; default nominal production time is 60 seconds")
@@ -66,8 +77,10 @@ def parse_args():
     p.add_argument("--a-gst-topic", help="default: impact_a_gst_p<P>")
     p.add_argument("--b-topic", default="impact_b")
     p.add_argument("--replication-factor", type=positive_int, default=1)
-    p.add_argument("--create-topics", action="store_true")
-    p.add_argument("--delete-topics-after", action="store_true", help="after each case stops, use the fixed runner to clean up its A/B topics")
+    p.add_argument("--create-topics", action="store_true", default=True,
+                   help="compatibility flag: missing experiment topics are always created/recreated")
+    p.add_argument("--delete-topics-after", action="store_true", default=True,
+                   help="compatibility flag: delete A/B topics after all cases/repetitions at each A client count")
     p.add_argument("--topic-delete-timeout", type=seconds, default=120)
     p.add_argument("--producer", type=Path, default=ROOT / "bin/single_topic_throughput_expr_producer")
     p.add_argument("--runner", type=Path, default=ROOT / "script/run_gst_fixed_partition_expr.sh")
@@ -95,8 +108,8 @@ def parse_args():
         p.error("invalid CSV timing or replication factor")
     if not 0 <= a.start_barrier_delay <= 2147483647 or not 0 <= a.drain_wait <= 2147483647:
         p.error("startup/drain waits must be in 0..2147483647")
-    if any(case in a.cases for case in ("normal", "gst")) and a.a_clients < a.partitions:
-        p.error("A clients must be >= A partitions")
+    if any(case in a.cases for case in ("normal", "gst")) and min(a.a_clients) < a.partitions:
+        p.error("every A client count must be >= A partitions")
     a.a_normal_topic = a.a_normal_topic or "impact_a_normal_p{}".format(a.partitions)
     a.a_gst_topic = a.a_gst_topic or "impact_a_gst_p{}".format(a.partitions)
     topics = [a.b_topic] + [getattr(a, "a_" + case + "_topic") for case in a.cases if case != "baseline"]
@@ -120,7 +133,7 @@ def parse_args():
     if a.run_timeout <= 0:
         p.error("run-timeout must be positive")
     budget = (a.run_timeout + a.command_timeout + 60) * 1000 / a.a_interval
-    if not math.isfinite(budget) or budget > 2147483647 // a.a_clients:
+    if not math.isfinite(budget) or budget > 2147483647 // max(a.a_clients):
         p.error("A attempt budget exceeds the producer's count limit")
     a.a_messages_per_client = max(1, math.ceil(budget))
     return a
@@ -132,6 +145,10 @@ class Experiment:
         self.a_process = self.b_process = self.command_process = None
         self.results = []
         self.cancelled = False
+        self.finalizing = False
+        self.cleaning = False
+        self.pending_topics = {}
+        self.cleanups = []
 
     def a_topic(self, case):
         return None if case == "baseline" else getattr(self.args, "a_" + case + "_topic")
@@ -139,12 +156,12 @@ class Experiment:
     def a_partitions(self, case):
         return 1 if case == "single" else self.args.partitions
 
-    def a_command(self, case, prefix):
+    def a_command(self, case, prefix, clients):
         a = self.args
         return [str(a.producer), "--broker", a.broker, "--topic-name", self.a_topic(case),
                 "--prefix", "load_A_" + prefix, "--partition-cnt", str(self.a_partitions(case)),
-                "--client-cnt", str(a.a_clients), "--interval", str(a.a_interval),
-                "--interval-noise-stddev", "0", "--msg-cnt", str(a.a_clients * a.a_messages_per_client),
+                "--client-cnt", str(clients), "--interval", str(a.a_interval),
+                "--interval-noise-stddev", "0", "--msg-cnt", str(clients * a.a_messages_per_client),
                 "--msg-size", str(a.message_size), "--start-barrier-delay", str(a.start_barrier_delay),
                 "--ignore-response", "--sample-log"]
 
@@ -225,38 +242,112 @@ class Experiment:
         if ("global.sequence.enabled=true" in configs) != (case == "gst"):
             raise RunError("A topic GST setting mismatch")
 
-    def cleanup(self, case, directory):
+    def cleanup_commands(self, directory, topics=None):
         a = self.args
-        command = ["/bin/bash", str(a.runner), "--cleanup-only", "--broker", a.broker,
-                   "--single-topic", a.b_topic, "--replication-factor", str(a.replication_factor),
-                   "--kafka-bin", str(a.kafka_bin), "--topic-delete-timeout", str(a.topic_delete_timeout),
-                   "--output-root", str(directory / "cleanup")]
-        if case == "baseline":
-            command += ["--modes", "single"]
-        else:
-            mode = "gst" if case == "gst" else "normal"
-            command += ["--partitions", str(self.a_partitions(case)), "--modes", mode + ",single",
-                        "--" + mode + "-topic", self.a_topic(case)]
-        self.command(command, directory, "cleanup", timeout=2 * a.topic_delete_timeout + 60)
+        # Pack compatible source topics into the runner's normal/gst/single
+        # slots. A-single and A-normal can require separate normal slots.
+        groups = []
+        for topic, (mode, partitions) in (self.pending_topics if topics is None else topics).items():
+            group = next((group for group in groups if mode not in group["modes"]
+                          and (mode == "single" or group["partitions"] == partitions)), None)
+            if group is None:
+                group = dict(partitions=partitions, modes={})
+                groups.append(group)
+            group["modes"][mode] = topic
+        commands = []
+        for index, group in enumerate(groups):
+            command = ["/bin/bash", str(a.runner), "--cleanup-only", "--broker", a.broker,
+                       "--partitions", str(group["partitions"]), "--replication-factor", str(a.replication_factor),
+                       "--kafka-bin", str(a.kafka_bin), "--topic-delete-timeout", str(a.topic_delete_timeout),
+                       "--output-root", str(directory / ("runner_" + str(index))), "--modes", ",".join(group["modes"])]
+            for mode, topic in group["modes"].items():
+                command += ["--" + mode + "-topic", topic]
+            commands.append((command, list(group["modes"].values())))
+        return commands
 
-    def run_case(self, repetition, case):
+    def cleanup(self, command, targets, directory, label):
+        try:
+            self.command(command, directory, label, timeout=len(targets) * self.args.topic_delete_timeout + 60)
+        except RunError as error:
+            # A failed preparation or an interrupted deletion can leave some
+            # targets already absent. Confirm absence using a successful list,
+            # rather than treating any describe/connection failure as deletion.
+            self.command([str(self.args.kafka_bin / "kafka-topics.sh"), "--bootstrap-server", self.args.broker, "--list"],
+                         directory, label + "_verify")
+            listed = {line.strip() for line in (directory / (label + "_verify.log")).read_text().splitlines()}
+            remaining = set(targets).intersection(listed)
+            if remaining:
+                raise RunError("{}; topics still present: {}".format(error, ",".join(sorted(remaining))))
+
+    def finish_clients(self, clients):
+        self.finalizing = True
+        directory = self.output / "clients_{}_cleanup".format(clients)
+        result = dict(load_clients=clients, status="SUCCESS", reason="", started_at=utc_now(),
+                      targets=list(self.pending_topics), log_dir=str(directory))
+        try:
+            self.stop_all()
+            directory.mkdir()
+            print("=== A clients={}: all cases/repetitions finished; cleaning topics ===".format(clients), flush=True)
+            self.cleaning = True
+            errors = []
+            for index, (command, targets) in enumerate(self.cleanup_commands(directory)):
+                label = "cleanup_" + str(index)
+                try:
+                    self.cleanup(command, targets, directory, label)
+                except Cancelled:
+                    result["interrupted"] = True
+                    # Finish deletion after an interruption. The signal handler
+                    # suppresses subsequent interrupts while this retry runs.
+                    try:
+                        self.cleanup(command, targets, directory, label + "_retry")
+                    except (RunError, OSError) as error:
+                        errors.append(str(error))
+                except (RunError, OSError) as error:
+                    errors.append(str(error))
+            if errors:
+                result.update(status="FAILED", reason="; ".join(errors))
+        except (RunError, OSError) as error:
+            result.update(status="FAILED", reason=str(error))
+        finally:
+            self.cleaning = False
+            result["finished_at"] = utc_now()
+            self.cleanups.append(result)
+            for row in self.results:
+                if row["load_clients"] == clients:
+                    row.update(cleanup_status=result["status"], cleanup_log_dir=str(directory))
+                    if result["reason"]:
+                        row["cleanup_reason"] = result["reason"]
+            self.write_results()
+            self.finalizing = False
+        if self.cancelled:
+            raise Cancelled()
+        if result["status"] == "FAILED":
+            raise CleanupError("Topic cleanup failed; stopping before the next A client count. See " + str(directory))
+        # Put the final cooldown after deletion so asynchronous broker log-file
+        # removal has a settling interval before the next client count.
+        time.sleep(self.args.cooldown)
+
+    def run_case(self, clients, repetition, case, cooldown=True):
         a = self.args
         run_id = "repeat_{}_{}".format(repetition, case)
+        if len(a.a_clients) > 1:
+            run_id = "clients_{}_".format(clients) + run_id
         directory = self.output / run_id
         directory.mkdir()
         prefix = "probe_B_" + self.output.name.replace(".", "_") + "_" + run_id
-        result = dict(run_id=run_id, repetition=repetition, case=case, status="SUCCESS", reason="",
+        result = dict(run_id=run_id, repetition=repetition, case=case, load_clients=clients, status="SUCCESS", reason="",
                       a_topic=self.a_topic(case), a_partitions=None if case == "baseline" else self.a_partitions(case),
-                      a_clients=0 if case == "baseline" else a.a_clients, a_interval_ms=a.a_interval,
+                      a_clients=0 if case == "baseline" else clients, a_interval_ms=a.a_interval,
                       b_topic=a.b_topic, b_clients=1, b_partitions=1, b_interval_ms=a.b_interval,
                       b_messages=a.b_messages_per_client, b_record_prefix=prefix, b_scope="all_B_clients",
-                      a_exit=None, a_forced_kill=False, b_runner_exit=None, cleanup_status="DISABLED", started_at=utc_now(), log_dir=str(directory))
+                      a_exit=None, a_forced_kill=False, b_runner_exit=None, cleanup_status="PENDING", started_at=utc_now(), log_dir=str(directory))
         started = False
         print("=== {}: A={} B={} ===".format(run_id, self.a_topic(case) or "off", a.b_topic), flush=True)
         try:
             if case != "baseline":
+                self.pending_topics[self.a_topic(case)] = ("gst" if case == "gst" else "normal", self.a_partitions(case))
                 self.prepare_a(case, directory)
-                command = self.a_command(case, prefix)
+                command = self.a_command(case, prefix, clients)
                 self.event(directory, "a_start", command=command)
                 # A remains untagged; its client log output is discarded.
                 self.a_process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
@@ -269,6 +360,7 @@ class Experiment:
                        GST_INTERFERENCE_CSV_WAIT=str(a.csv_wait), GST_INTERFERENCE_CSV_STABLE=str(a.csv_stable),
                        GST_INTERFERENCE_CASE=case)
             with (directory / "runner.log").open("w") as output:
+                self.pending_topics[a.b_topic] = ("single", 1)
                 self.b_process = subprocess.Popen(command, stdout=output, stderr=subprocess.STDOUT, env=env, start_new_session=True)
                 started = True
                 deadline = time.monotonic() + a.run_timeout
@@ -301,6 +393,7 @@ class Experiment:
             result.update(status="INTERRUPTED", reason="controller_interrupted")
             raise
         finally:
+            self.finalizing = True
             self.event(directory, "stop_requested")
             self.stop(self.b_process, a.stop_grace + 6)
             if self.b_process is not None:
@@ -313,29 +406,20 @@ class Experiment:
                 result["a_forced_kill"] = forced
             self.b_process = self.a_process = None
             self.event(directory, "producers_stopped")
-            cleanup_cancelled = False
-            if a.delete_topics_after and started and not self.cancelled:
-                try:
-                    self.cleanup(case, directory)
-                    result["cleanup_status"] = "SUCCESS"
-                except (RunError, OSError) as error:
-                    result.update(cleanup_status="FAILED", cleanup_reason=str(error))
-                except Cancelled:
-                    result.update(cleanup_status="INTERRUPTED", cleanup_reason="controller_interrupted_during_cleanup")
-                    cleanup_cancelled = True
             result["finished_at"] = utc_now()
             self.results.append(result)
             self.write_results()
-            if cleanup_cancelled:
+            self.finalizing = False
+            if self.cancelled:
                 raise Cancelled()
         print("  {} B_rps={} IO_p99_ms={}".format(result["status"], result.get("b_store_rps"), result.get("b_io_latency_p99_ms")), flush=True)
-        if started:
+        if started and cooldown:
             time.sleep(a.cooldown)
 
     def write_results(self):
-        baselines = {r["repetition"]: r for r in self.results if r["case"] == "baseline" and r["status"] == "SUCCESS"}
+        baselines = {(r["load_clients"], r["repetition"]): r for r in self.results if r["case"] == "baseline" and r["status"] == "SUCCESS"}
         for result in self.results:
-            baseline = baselines.get(result["repetition"])
+            baseline = baselines.get((result["load_clients"], result["repetition"]))
             result.update(b_baseline_run_id=baseline["run_id"] if baseline else None,
                           b_store_ratio_to_baseline=None, b_store_drop_pct=None)
             for stage in ("io", "network"):
@@ -354,9 +438,9 @@ class Experiment:
         metrics = ("b_store_rps", "b_store_ratio_to_baseline", "b_store_drop_pct",
                    "b_io_latency_mean_ms", "b_io_latency_p95_ms", "b_io_latency_p99_ms", "b_io_latency_p99_delta_ms",
                    "b_network_latency_mean_ms", "b_network_latency_p95_ms", "b_network_latency_p99_ms", "b_network_latency_p99_delta_ms")
-        for case in self.args.cases:
-            rows = [r for r in self.results if r["case"] == case]
-            row = dict(case=case, successful_runs=sum(r["status"] == "SUCCESS" for r in rows),
+        for clients, case in ((clients, case) for clients in self.args.a_clients for case in self.args.cases):
+            rows = [r for r in self.results if r["case"] == case and r["load_clients"] == clients]
+            row = dict(load_clients=clients, case=case, successful_runs=sum(r["status"] == "SUCCESS" for r in rows),
                        failed_or_skipped_runs=sum(r["status"] != "SUCCESS" for r in rows))
             for metric in metrics:
                 values = [r[metric] for r in rows if r["status"] == "SUCCESS" and r.get(metric) is not None]
@@ -366,6 +450,8 @@ class Experiment:
             aggregates.append(row)
         self.write_table(self.output / "conditions.tsv", aggregates)
         (self.output / "conditions.json").write_text(json.dumps(aggregates, indent=2) + "\n")
+        self.write_table(self.output / "client_cleanup.tsv", self.cleanups)
+        (self.output / "client_cleanup.json").write_text(json.dumps(self.cleanups, indent=2) + "\n")
 
     @staticmethod
     def write_table(path, rows):
@@ -378,12 +464,19 @@ class Experiment:
     def run(self):
         a = self.args
         if a.dry_run:
-            print("B: one tagged client/partition; A: untagged, output discarded; no warmup")
-            for case in a.cases:
-                print("\nCASE " + case)
-                if case != "baseline":
-                    print("A: " + " ".join(shlex.quote(arg) for arg in self.a_command(case, "dry_run")))
-                print("B runner: " + " ".join(shlex.quote(arg) for arg in self.b_command(a.output_root / "dry-run", "probe_B_dry_run")))
+            print("B: one tagged client/partition; A: untagged; no warmup; clean topics after all cases/repetitions at each A client count")
+            topics = {a.b_topic: ("single", 1)}
+            topics.update({self.a_topic(case): ("gst" if case == "gst" else "normal", self.a_partitions(case))
+                           for case in a.cases if case != "baseline"})
+            for clients in a.a_clients:
+                print("\nA clients={}: repeat cases {} x{}, then cleanup".format(clients, a.cases, a.repetitions))
+                for case in a.cases:
+                    print("CASE " + case)
+                    if case != "baseline":
+                        print("A: " + " ".join(shlex.quote(arg) for arg in self.a_command(case, "dry_run", clients)))
+                    print("B runner: " + " ".join(shlex.quote(arg) for arg in self.b_command(a.output_root / "dry-run", "probe_B_dry_run")))
+                for command, _ in self.cleanup_commands(a.output_root / "dry-run-cleanup", topics):
+                    print("Cleanup after all repetitions: " + " ".join(shlex.quote(arg) for arg in command))
             return 0
         for executable in (a.producer, a.runner, a.kafka_bin / "kafka-topics.sh", a.kafka_bin / "kafka-broker-extension.sh", Path(__file__).resolve()):
             if not executable.is_file() or not os.access(str(executable), os.X_OK):
@@ -398,9 +491,15 @@ class Experiment:
         for name in (Path(__file__).name, "gst_interference_logs.py"):
             (self.output / name).write_bytes(Path(__file__).with_name(name).read_bytes())
         print("Results: {}".format(self.output), flush=True)
-        for repetition in range(1, a.repetitions + 1):
-            for case in a.cases:
-                self.run_case(repetition, case)
+        for clients in a.a_clients:
+            self.pending_topics = {}
+            try:
+                for repetition in range(1, a.repetitions + 1):
+                    for index, case in enumerate(a.cases):
+                        last = repetition == a.repetitions and index == len(a.cases) - 1
+                        self.run_case(clients, repetition, case, cooldown=not last)
+            finally:
+                self.finish_clients(clients)
         return 1 if any(r["status"] != "SUCCESS" or r["cleanup_status"] == "FAILED" for r in self.results) else 0
 
 
@@ -429,15 +528,19 @@ def main():
     def cancel(signum, frame):
         if not experiment.cancelled:
             experiment.cancelled = True
-            raise Cancelled()
+            if not experiment.finalizing or experiment.cleaning:
+                raise Cancelled()
 
     signal.signal(signal.SIGINT, cancel)
     signal.signal(signal.SIGTERM, cancel)
     try:
         return experiment.run()
     except Cancelled:
-        print("Interrupted; stopping owned A/B processes.", file=sys.stderr)
+        print("Interrupted; owned A/B processes stopped and topic cleanup attempted.", file=sys.stderr)
         return 130
+    except CleanupError as error:
+        print(str(error), file=sys.stderr)
+        return 1
     except (RunError, OSError) as error:
         print("Error: {}".format(error), file=sys.stderr)
         return 2
