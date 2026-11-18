@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure live GST E2E latency or prefilled-topic Fetch throughput."""
+"""Measure GST or ordinary single-partition Fetch throughput and E2E latency."""
 
 import argparse
 import csv
@@ -60,18 +60,35 @@ def batch_sizes(value):
     return values
 
 
+def client_counts(value):
+    values = [positive(part.strip()) for part in value.split(",")]
+    if any(previous >= current for previous, current in zip(values, values[1:])):
+        raise argparse.ArgumentTypeError("client counts must be distinct and strictly increasing")
+    return values
+
+
+def topic_modes(value):
+    values = [part.strip() for part in value.split(",")]
+    if any(mode not in ("gst", "single") for mode in values) or len(set(values)) != len(values):
+        raise argparse.ArgumentTypeError("topic modes must be distinct names from gst,single")
+    return values
+
+
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--broker", default="166.104.110.13:9092")
     p.add_argument("--mode", choices=("live", "backlog"), default="live",
                    help="live: produce/fetch together; backlog: produce first, then measure drain")
-    p.add_argument("--partitions", type=positive, default=16)
-    p.add_argument("--clients", type=positive, default=16, help="producer client count")
+    p.add_argument("--topic-modes", "--topic-mode", type=topic_modes, default="gst",
+                   help="ordered topic modes, e.g. gst,single; single always uses partition 0")
+    p.add_argument("--partitions", type=positive, default=16, help="GST source partitions; single mode always uses 1")
+    p.add_argument("--clients", type=client_counts, default="16",
+                   help="increasing producer client counts, e.g. 16,32,64,128")
     p.add_argument("--interval", type=seconds, default=3, help="producer interval in ms")
     p.add_argument("--messages-per-client", type=positive, default=20000)
     p.add_argument("--message-size", type=positive, default=1000)
     p.add_argument("--batch-sizes", "--batch-size", type=batch_sizes, default="1000",
-                   help="consumer global-position range per call, e.g. 100,500,1000")
+                   help="GST position range / single consumer delivery cap, e.g. 100,500,1000")
     p.add_argument("--max-batches", type=positive, default=1000, help="API98 production-batch limit")
     p.add_argument("--max-bytes", type=positive, default=1048576, help="API98 soft encoded-byte limit")
     p.add_argument("--isolation-level", type=int, choices=(0, 1), default=0)
@@ -85,6 +102,8 @@ def parse_args():
     p.add_argument("--command-timeout", type=seconds, default=30)
     p.add_argument("--stop-grace", type=seconds, default=10)
     p.add_argument("--topic-delete-timeout", type=seconds, default=120)
+    p.add_argument("--cleanup-after", choices=("clients", "run"), default="clients",
+                   help="delete topics after all topic modes/batches/repetitions at each client count (default), or each run")
     p.add_argument("--cooldown", type=seconds, default=60, help="wait after topic deletion")
     p.add_argument("--replication-factor", type=positive, default=1)
     p.add_argument("--topic-prefix", default="gst_fetch")
@@ -96,12 +115,15 @@ def parse_args():
     p.add_argument("--no-latency-log", action="store_true", help="keep exact consumer summary/histogram, skip per-record CSV")
     p.add_argument("--dry-run", action="store_true")
     a = p.parse_args()
-    if a.clients < a.partitions or not 0 < a.interval < 1e9:
-        p.error("need clients >= partitions and 0 < interval < 1e9 ms")
-    if a.clients > 2147483647 // a.messages_per_client:
+    required_clients = a.partitions if "gst" in a.topic_modes else 1
+    if min(a.clients) < required_clients or not 0 < a.interval < 1e9:
+        p.error("need every client count >= selected topic partitions and 0 < interval < 1e9 ms")
+    if max(a.clients) > 2147483647 // a.messages_per_client:
         p.error("total producer attempt count exceeds the existing app limit")
     if a.max_batches > 1000 or a.max_bytes > 16646144 or a.replication_factor > 32767:
         p.error("invalid API98 batch/byte limit or replication factor")
+    if "single" in a.topic_modes and a.max_bytes < 1000:
+        p.error("single mode needs max-bytes >= 1000")
     if not a.broker or not re.fullmatch(r"[A-Za-z0-9._-]{1,120}", a.topic_prefix) or a.topic_prefix in (".", ".."):
         p.error("invalid broker or topic prefix")
     if any(value <= 0 for value in (a.command_timeout, a.catchup_timeout, a.topic_delete_timeout)):
@@ -122,6 +144,11 @@ class Experiment:
         self.producer = self.consumer = self.command_process = None
         self.cancelled = self.finalizing = self.cleaning = False
         self.results = []
+        self.pending_topics = {}
+        self.cleanups = []
+
+    def partitions_for(self, topic_mode):
+        return self.args.partitions if topic_mode == "gst" else 1
 
     def stop(self, process, grace=None):
         if process is None:
@@ -160,15 +187,15 @@ class Experiment:
         if code:
             raise RunError("{} exited {}".format(label, code))
 
-    def commands(self, directory, topic, size):
+    def commands(self, directory, topic, size, clients, topic_mode):
         a = self.args
         producer = [str(a.producer), "--broker", a.broker, "--topic-name", topic, "--prefix", topic,
-                    "--partition-cnt", str(a.partitions), "--client-cnt", str(a.clients),
+                    "--partition-cnt", str(self.partitions_for(topic_mode)), "--client-cnt", str(clients),
                     "--interval", str(a.interval), "--interval-noise-stddev", "0",
-                    "--msg-cnt", str(a.clients * a.messages_per_client), "--msg-size", str(a.message_size),
+                    "--msg-cnt", str(clients * a.messages_per_client), "--msg-size", str(a.message_size),
                     "--start-barrier-delay", str(a.start_barrier_delay), "--ignore-response", "--sample-log"]
-        consumer = [str(a.consumer), "--broker", a.broker, "--topic", topic, "--start-offset", "0",
-                    "--end-offset", str(a.clients * a.messages_per_client), "--batch-size", str(size),
+        consumer = [str(a.consumer), "--broker", a.broker, "--topic", topic, "--topic-mode", topic_mode, "--start-offset", "0",
+                    "--end-offset", str(clients * a.messages_per_client), "--batch-size", str(size),
                     "--max-batches", str(a.max_batches), "--max-bytes", str(a.max_bytes),
                     "--isolation-level", str(a.isolation_level), "--fetch-timeout-ms", str(a.fetch_timeout_ms),
                     "--poll-interval-ms", str(a.poll_interval_ms), "--metrics-interval-ms", str(a.metrics_interval_ms),
@@ -178,10 +205,11 @@ class Experiment:
             consumer.append("--no-latency-log")
         return producer, consumer
 
-    def cleanup(self, directory, topic):
+    def cleanup(self, directory, topic, topic_mode):
         a = self.args
+        topic_option = "--gst-topic" if topic_mode == "gst" else "--single-topic"
         command = ["/bin/bash", str(a.cleanup_runner), "--cleanup-only", "--broker", a.broker,
-                   "--partitions", str(a.partitions), "--modes", "gst", "--gst-topic", topic,
+                   "--partitions", str(self.partitions_for(topic_mode)), "--modes", topic_mode, topic_option, topic,
                    "--replication-factor", str(a.replication_factor), "--kafka-bin", str(a.kafka_bin),
                    "--topic-delete-timeout", str(a.topic_delete_timeout), "--output-root", str(directory / "cleanup")]
         try:
@@ -191,27 +219,73 @@ class Experiment:
             if topic in {line.strip() for line in (directory / "cleanup_verify.log").read_text().splitlines()}:
                 raise error
 
-    def run_case(self, size, repetition):
-        a = self.args
-        run_id = "batch_{}_repeat_{}".format(size, repetition)
-        directory = self.output / run_id
-        directory.mkdir()
-        topic = "{}_p{}_{}_{}".format(a.topic_prefix, a.partitions, run_id, self.output.name.split(".")[-1])
-        result = dict(run_id=run_id, batch_size=size, repetition=repetition, topic=topic, partitions=a.partitions,
-                      producer_clients=a.clients, producer_interval_ms=a.interval,
-                      producer_attempts=a.clients * a.messages_per_client, message_size=a.message_size,
-                      max_batches=a.max_batches, max_bytes=a.max_bytes, status="SUCCESS", reason="",
-                      producer_exit=None, consumer_exit=None, cleanup_status="NOT_CREATED", started_at=now(), log_dir=str(directory))
-        created = False
-        cleanup_failed = False
-        streams = []
-        print("=== {}: {} GST Fetch, topic={} ===".format(run_id, a.mode, topic), flush=True)
+    def cleanup_pending(self, clients):
+        if not self.pending_topics:
+            return
+        self.finalizing = True
+        self.stop_all()
+        result = dict(producer_clients=clients, scope=self.args.cleanup_after, status="SUCCESS",
+                      targets=list(self.pending_topics), started_at=now(), deleted_topics=[], failed_topics=[])
+        print("=== clients={}: cleaning {} experiment topics ===".format(clients, len(self.pending_topics)), flush=True)
+        self.cleaning = True
         try:
-            self.command([str(a.kafka_bin / "kafka-topics.sh"), "--bootstrap-server", a.broker, "--create", "--topic", topic,
-                          "--partitions", str(a.partitions), "--replication-factor", str(a.replication_factor),
-                          "--config", "cleanup.policy=delete", "--config", "global.sequence.enabled=true"], directory, "create")
-            created = True
-            producer, consumer = self.commands(directory, topic, size)
+            for topic, (directory, row) in list(self.pending_topics.items()):
+                try:
+                    try:
+                        self.cleanup(directory, topic, row["topic_mode"])
+                    except Cancelled:
+                        result["cleanup_interrupted"] = True
+                        self.cleanup(directory, topic, row["topic_mode"])
+                    row["cleanup_status"] = "SUCCESS"
+                    result["deleted_topics"].append(topic)
+                except (RunError, OSError) as error:
+                    row.update(cleanup_status="FAILED", cleanup_reason=str(error))
+                    result["status"] = "FAILED"
+                    result["failed_topics"].append(topic)
+                row["cleanup_finished_at"] = now()
+                row["cleanup_log_dir"] = str(directory)
+                del self.pending_topics[topic]
+        finally:
+            self.cleaning = False
+            result["finished_at"] = now()
+            self.cleanups.append(result)
+            # Finish all deletion attempts before persisting reports.
+            try:
+                for row in self.results:
+                    if row["producer_clients"] == clients:
+                        (Path(row["log_dir"]) / "result.json").write_text(json.dumps(row, indent=2) + "\n")
+                self.write_results()
+            finally:
+                self.finalizing = False
+        if self.cancelled:
+            raise Cancelled()
+        if result["status"] != "SUCCESS":
+            raise RunError("topic cleanup failed; no further production will start: " + ", ".join(result["failed_topics"]))
+
+    def run_case(self, clients, topic_mode, size, repetition):
+        a = self.args
+        partitions = self.partitions_for(topic_mode)
+        case_id = "batch_{}_repeat_{}".format(size, repetition)
+        run_id = "clients_{}_{}_{}".format(clients, topic_mode, case_id)
+        directory = self.output / "clients_{}".format(clients) / topic_mode / case_id
+        directory.mkdir()
+        topic = "{}_p{}_{}_{}".format(a.topic_prefix, partitions, run_id, self.output.name.split(".")[-1])
+        result = dict(run_id=run_id, topic_mode=topic_mode, batch_size=size, repetition=repetition, topic=topic, partitions=partitions,
+                      producer_clients=clients, producer_interval_ms=a.interval,
+                      producer_attempts=clients * a.messages_per_client, message_size=a.message_size,
+                      max_batches=a.max_batches if topic_mode == "gst" else None,
+                      max_bytes=a.max_bytes, status="SUCCESS", reason="",
+                      producer_exit=None, consumer_exit=None, cleanup_status="NOT_CREATED", started_at=now(), log_dir=str(directory))
+        streams = []
+        print("=== {}: {} {} Fetch, P={}, topic={} ===".format(run_id, a.mode, topic_mode, partitions, topic), flush=True)
+        try:
+            create = [str(a.kafka_bin / "kafka-topics.sh"), "--bootstrap-server", a.broker, "--create", "--topic", topic,
+                      "--partitions", str(partitions), "--replication-factor", str(a.replication_factor),
+                      "--config", "cleanup.policy=delete", "--config", "global.sequence.enabled=" + str(topic_mode == "gst").lower()]
+            self.command(create, directory, "create")
+            self.pending_topics[topic] = (directory, result)
+            result["cleanup_status"] = "PENDING"
+            producer, consumer = self.commands(directory, topic, size, clients, topic_mode)
             (directory / "producer_command.json").write_text(json.dumps(producer, indent=2) + "\n")
             (directory / "consumer_command.json").write_text(json.dumps(consumer, indent=2) + "\n")
             def start_consumer():
@@ -280,24 +354,6 @@ class Experiment:
                     result.update(status="FAILED", reason="invalid consumer summary: " + str(error))
             elif result["status"] == "SUCCESS":
                 result.update(status="FAILED", reason="consumer summary missing")
-            if created:
-                self.cleaning = True
-                try:
-                    self.cleanup(directory, topic)
-                    result["cleanup_status"] = "SUCCESS"
-                except Cancelled:
-                    result["cleanup_interrupted"] = True
-                    try:
-                        self.cleanup(directory, topic)
-                        result["cleanup_status"] = "SUCCESS"
-                    except (RunError, OSError) as error:
-                        cleanup_failed = True
-                        result.update(cleanup_status="FAILED", cleanup_reason=str(error))
-                except (RunError, OSError) as error:
-                    cleanup_failed = True
-                    result.update(cleanup_status="FAILED", cleanup_reason=str(error))
-                finally:
-                    self.cleaning = False
             result["finished_at"] = now()
             self.results.append(result)
             (directory / "result.json").write_text(json.dumps(result, indent=2) + "\n")
@@ -305,11 +361,8 @@ class Experiment:
             self.finalizing = False
             if self.cancelled:
                 raise Cancelled()
-            if cleanup_failed:
-                raise RunError("topic cleanup failed; no further production will start: " + topic)
         print("  {} records={} throughput={} E2E_p99_ms={}".format(result["status"], result.get("consumed_records"),
               result.get("throughput_records_per_sec"), result.get("e2e_latency_p99_ms")), flush=True)
-        time.sleep(a.cooldown)
 
     @staticmethod
     def table(path, rows):
@@ -322,31 +375,46 @@ class Experiment:
     def write_results(self):
         self.table(self.output / "summary.tsv", self.results)
         (self.output / "summary.json").write_text(json.dumps(self.results, indent=2) + "\n")
+        self.table(self.output / "client_cleanup.tsv", self.cleanups)
+        (self.output / "client_cleanup.json").write_text(json.dumps(self.cleanups, indent=2) + "\n")
         groups = []
-        for size in self.args.batch_sizes:
-            rows = [row for row in self.results if row["batch_size"] == size]
-            group = dict(batch_size=size, successful_runs=sum(row["status"] == "SUCCESS" for row in rows),
-                         failed_runs=sum(row["status"] != "SUCCESS" for row in rows))
-            for metric in ("throughput_records_per_sec", "throughput_payload_bytes_per_sec",
-                           "e2e_latency_mean_ms", "e2e_latency_p95_ms", "e2e_latency_p99_ms"):
-                values = [row[metric] for row in rows if row["status"] == "SUCCESS" and row.get(metric) is not None]
-                group[metric + "_n"] = len(values)
-                group[metric + "_mean"] = statistics.mean(values) if values else None
-                group[metric + "_stddev"] = statistics.stdev(values) if len(values) > 1 else None
-            groups.append(group)
+        for clients in self.args.clients:
+            for topic_mode in self.args.topic_modes:
+                for size in self.args.batch_sizes:
+                    rows = [row for row in self.results if row["producer_clients"] == clients
+                            and row["topic_mode"] == topic_mode and row["batch_size"] == size]
+                    group = dict(topic_mode=topic_mode, partitions=self.partitions_for(topic_mode),
+                                 producer_clients=clients, batch_size=size,
+                                 successful_runs=sum(row["status"] == "SUCCESS" for row in rows),
+                                 failed_runs=sum(row["status"] != "SUCCESS" for row in rows))
+                    for metric in ("throughput_records_per_sec", "throughput_payload_bytes_per_sec",
+                                   "e2e_latency_mean_ms", "e2e_latency_p95_ms", "e2e_latency_p99_ms"):
+                        values = [row[metric] for row in rows if row["status"] == "SUCCESS" and row.get(metric) is not None]
+                        group[metric + "_n"] = len(values)
+                        group[metric + "_mean"] = statistics.mean(values) if values else None
+                        group[metric + "_stddev"] = statistics.stdev(values) if len(values) > 1 else None
+                    groups.append(group)
         self.table(self.output / "batches.tsv", groups)
         (self.output / "batches.json").write_text(json.dumps(groups, indent=2) + "\n")
 
     def run(self):
         a = self.args
         if a.dry_run:
-            for size in a.batch_sizes:
-                topic = "{}_p{}_batch_{}_repeat_1_dry".format(a.topic_prefix, a.partitions, size)
-                producer, consumer = self.commands(a.output_root / "dry-run", topic, size)
-                stages = "consumer ready -> producer -> catch up" if a.mode == "live" else "producer -> consumer drain"
-                print("batch_size={} repetitions={}: create fresh GST -> {} -> delete topic".format(size, a.repetitions, stages))
-                print("CONSUMER: " + " ".join(shlex.quote(arg) for arg in consumer))
-                print("PRODUCER: " + " ".join(shlex.quote(arg) for arg in producer))
+            for clients in a.clients:
+                print("\nclients={}: all topic modes/batch sizes/repetitions, cleanup-after={}".format(clients, a.cleanup_after))
+                for topic_mode in a.topic_modes:
+                    partitions = self.partitions_for(topic_mode)
+                    for size in a.batch_sizes:
+                        topic = "{}_{}_p{}_clients_{}_batch_{}_repeat_1_dry".format(a.topic_prefix, topic_mode, partitions, clients, size)
+                        producer, consumer = self.commands(a.output_root / "dry-run", topic, size, clients, topic_mode)
+                        stages = "consumer ready -> producer -> catch up" if a.mode == "live" else "producer -> consumer drain"
+                        print("topic_mode={} P={} batch_size={} repetitions={}: create fresh topic -> {}".format(topic_mode, partitions, size, a.repetitions, stages))
+                        print("CONSUMER: " + " ".join(shlex.quote(arg) for arg in consumer))
+                        print("PRODUCER: " + " ".join(shlex.quote(arg) for arg in producer))
+                        if a.cleanup_after == "run":
+                            print("  delete this run's topic -> cooldown {}s".format(a.cooldown))
+                if a.cleanup_after == "clients":
+                    print("delete all topics for clients={} -> cooldown {}s -> next client count".format(clients, a.cooldown))
             return 0
         for path in (a.producer, a.consumer, a.cleanup_runner, a.kafka_bin / "kafka-topics.sh"):
             if not path.is_file() or not os.access(str(path), os.X_OK):
@@ -354,14 +422,30 @@ class Experiment:
         a.output_root.mkdir(parents=True, exist_ok=True)
         self.output = Path(tempfile.mkdtemp(prefix=datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ."), dir=str(a.output_root)))
         config = {key: str(value) if isinstance(value, Path) else value for key, value in vars(a).items()}
-        config.update(generator_host=socket.gethostname(), measurement=a.mode + " GST fetch", producer_acks=0, consumer_count=1,
+        config.update(generator_host=socket.gethostname(), measurement=a.mode + " " + ",".join(a.topic_modes) + " fetch", producer_acks=0, consumer_count=1,
+                      topic_partitions={mode: self.partitions_for(mode) for mode in a.topic_modes},
                       message_generator="FastJsonBasedLatencyMonitoringMessageGenerator", throughput_clock="consumer steady elapsed time")
         (self.output / "config.json").write_text(json.dumps(config, indent=2) + "\n")
         (self.output / "script.py").write_bytes(Path(__file__).read_bytes())
         print("Results: " + str(self.output), flush=True)
-        for size in a.batch_sizes:
-            for repetition in range(1, a.repetitions + 1):
-                self.run_case(size, repetition)
+        for clients in a.clients:
+            (self.output / "clients_{}".format(clients)).mkdir()
+            try:
+                for topic_mode in a.topic_modes:
+                    (self.output / "clients_{}".format(clients) / topic_mode).mkdir()
+                    for size in a.batch_sizes:
+                        for repetition in range(1, a.repetitions + 1):
+                            try:
+                                self.run_case(clients, topic_mode, size, repetition)
+                            finally:
+                                if a.cleanup_after == "run":
+                                    self.cleanup_pending(clients)
+                            if a.cleanup_after == "run":
+                                time.sleep(a.cooldown)
+            finally:
+                self.cleanup_pending(clients)
+            if a.cleanup_after == "clients":
+                time.sleep(a.cooldown)
         return 1 if any(row["status"] != "SUCCESS" for row in self.results) else 0
 
 

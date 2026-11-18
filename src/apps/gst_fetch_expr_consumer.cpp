@@ -35,12 +35,30 @@ int64_t wall_ms() {
 }
 
 struct Arguments {
-    std::string broker = "166.104.110.13:9092", topic, output, ready_file;
+    std::string broker = "166.104.110.13:9092", topic, output, ready_file, topic_mode = "gst";
     int64_t start = 0, end = std::numeric_limits<int64_t>::max(), batch_size = 1000;
     bool bounded = false, latency_log = true;
     int max_batches = 1000, max_bytes = 1048576, isolation = 0;
     int timeout_ms = 10000, poll_ms = 1, interval_ms = 1000, max_errors = 10;
     double duration = 60;
+};
+
+struct PartitionConsumer {
+    rd_kafka_topic_t *topic = nullptr;
+    bool started = false;
+    ~PartitionConsumer() {
+        if (started) rd_kafka_consume_stop(topic, 0);
+        if (topic) rd_kafka_topic_destroy(topic);
+    }
+};
+
+struct MessageBatch {
+    std::vector<rd_kafka_message_t *> values;
+    size_t count = 0;
+    explicit MessageBatch(size_t capacity) : values(capacity) {}
+    ~MessageBatch() {
+        for (size_t i = 0; i < count; ++i) rd_kafka_message_destroy(values[i]);
+    }
 };
 
 int64_t integer(const std::string &text, const std::string &name, int64_t minimum,
@@ -57,9 +75,10 @@ int64_t integer(const std::string &text, const std::string &name, int64_t minimu
 void usage() {
     std::cout << "Usage: gst_fetch_expr_consumer --topic NAME --output-dir DIR [options]\n"
         "  --broker HOST:PORT          Bootstrap broker\n"
-        "  --start-offset N            First global position (0)\n"
+        "  --topic-mode gst|single     API98 or ordinary partition 0 (gst)\n"
+        "  --start-offset N            First global/partition position (0)\n"
         "  --end-offset N              Exclusive finite target; otherwise follow until duration\n"
-        "  --batch-size N              Global positions requested per call (1000)\n"
+        "  --batch-size N              GST position range / single delivery cap (1000)\n"
         "  --max-batches N             API98 production-batch limit, 1..1000 (1000)\n"
         "  --max-bytes N               API98 soft byte limit, 1..16646144 (1048576)\n"
         "  --isolation-level 0|1       read_uncommitted/read_committed (0)\n"
@@ -80,6 +99,7 @@ Arguments parse(int argc, char **argv) {
         if (i + 1 >= argc) throw std::runtime_error("Missing value for " + option);
         std::string value = argv[++i];
         if (option == "--broker") a.broker = value;
+        else if (option == "--topic-mode") a.topic_mode = value;
         else if (option == "--topic") a.topic = value;
         else if (option == "--output-dir") a.output = value;
         else if (option == "--ready-file") a.ready_file = value;
@@ -101,7 +121,10 @@ Arguments parse(int argc, char **argv) {
         } else throw std::runtime_error("Unknown option: " + option);
     }
     if (a.topic.empty() || a.broker.empty() || a.output.empty() || a.end < a.start)
-        throw std::runtime_error("Need topic, broker, output-dir and a valid global range");
+        throw std::runtime_error("Need topic, broker, output-dir and a valid offset range");
+    if (a.topic_mode != "gst" && a.topic_mode != "single") throw std::runtime_error("Invalid topic-mode");
+    if (a.topic_mode == "single" && (a.batch_size > 2147483647 || a.max_bytes < 1000))
+        throw std::runtime_error("single mode needs batch-size <= 2147483647 and max-bytes >= 1000");
     return a;
 }
 
@@ -170,6 +193,7 @@ struct Histogram {
 };
 
 int run(const Arguments &a) {
+    const bool single = a.topic_mode == "single";
     std::filesystem::create_directories(a.output);
     const std::filesystem::path out(a.output);
     std::vector<char> latency_buffer(1024 * 1024), throughput_buffer(65536);
@@ -178,7 +202,7 @@ int run(const Arguments &a) {
     throughput.rdbuf()->pubsetbuf(throughput_buffer.data(), throughput_buffer.size());
     throughput.open(out / "throughput.csv");
     if (!throughput) throw std::runtime_error("Cannot open throughput.csv");
-    throughput << "measured_at,measurement_duration_ms,consumed_records,payload_bytes,throughput_records_per_sec,throughput_payload_bytes_per_sec,fetch_calls,empty_pages,local_errors,broker_errors,next_global_offset,committed_global_end_offset\n";
+    throughput << "measured_at,measurement_duration_ms,consumed_records,payload_bytes,throughput_records_per_sec,throughput_payload_bytes_per_sec,fetch_calls,empty_pages,local_errors,broker_errors,next_global_offset,committed_global_end_offset,next_offset,partition\n";
     if (a.latency_log) {
         latency.open(out / "latency.csv");
         if (!latency) throw std::runtime_error("Cannot open latency.csv");
@@ -189,18 +213,40 @@ int run(const Arguments &a) {
     errors << "measured_at,scope,error_code,cursor,message\n";
     rd_kafka_conf_t *conf = rd_kafka_conf_new();
     char reason[512];
-    for (const auto &[key, value] : std::map<std::string, std::string>{
+    std::map<std::string, std::string> settings{
             {"bootstrap.servers", a.broker}, {"client.id", "gst-fetch-measurement"},
-            {"allow.auto.create.topics", "false"}}) {
+            {"allow.auto.create.topics", "false"}};
+    if (single) {
+        settings.insert({{"enable.auto.commit", "false"}, {"enable.auto.offset.store", "false"},
+            {"enable.partition.eof", "true"}, {"isolation.level", a.isolation ? "read_committed" : "read_uncommitted"},
+            {"fetch.message.max.bytes", std::to_string(a.max_bytes)}, {"fetch.max.bytes", std::to_string(a.max_bytes)},
+            {"message.max.bytes", std::to_string(std::min(a.max_bytes, 1000000))},
+            {"fetch.wait.max.ms", "500"}, {"fetch.min.bytes", "1"}});
+    }
+    for (const auto &[key, value] : settings) {
         if (rd_kafka_conf_set(conf, key.c_str(), value.c_str(), reason, sizeof(reason)) != RD_KAFKA_CONF_OK) {
             rd_kafka_conf_destroy(conf);
             throw std::runtime_error(reason);
         }
     }
-    // The producer handle is only the API98 transport: no records are produced,
-    // subscribed, assigned, committed, or balanced by this measurement client.
-    Kafka kafka(rd_kafka_new(RD_KAFKA_PRODUCER, conf, reason, sizeof(reason)), rd_kafka_destroy);
+    // GST uses a producer handle only as API98 transport. The single baseline
+    // consumes partition 0 directly without a group, subscription, or commits.
+    Kafka kafka(rd_kafka_new(single ? RD_KAFKA_CONSUMER : RD_KAFKA_PRODUCER, conf, reason, sizeof(reason)), rd_kafka_destroy);
     if (!kafka) { rd_kafka_conf_destroy(conf); throw std::runtime_error(reason); }
+    PartitionConsumer partition;
+    if (single) {
+        rd_kafka_topic_conf_t *topic_conf = rd_kafka_topic_conf_new();
+        for (const auto &[key, value] : std::map<std::string, std::string>{{"auto.commit.enable", "false"}, {"auto.offset.reset", "error"}}) {
+            if (rd_kafka_topic_conf_set(topic_conf, key.c_str(), value.c_str(), reason, sizeof(reason)) != RD_KAFKA_CONF_OK) {
+                rd_kafka_topic_conf_destroy(topic_conf);
+                throw std::runtime_error(reason);
+            }
+        }
+        partition.topic = rd_kafka_topic_new(kafka.get(), a.topic.c_str(), topic_conf);
+        if (!partition.topic || rd_kafka_consume_start(partition.topic, 0, a.start) != 0)
+            throw std::runtime_error(rd_kafka_err2str(rd_kafka_last_error()));
+        partition.started = true;
+    }
     rd_kafka_global_sequence_fetch_options_t options;
     rd_kafka_global_sequence_fetch_options_init(&options);
     options.max_batches = a.max_batches;
@@ -211,6 +257,7 @@ int run(const Arguments &a) {
     Histogram e2e;
     uint64_t records = 0, bytes = 0, fetches = 0, empty = 0, local_errors = 0, broker_errors = 0;
     uint64_t invalid = 0, negative = 0, skipped = 0, order_errors = 0, max_page_records = 0;
+    uint64_t eof_events = 0;
     uint64_t previous_records = 0, previous_bytes = 0, previous_fetches = 0, previous_empty = 0;
     uint64_t previous_local = 0, previous_broker = 0;
     int64_t next = a.start, last_global = a.start - 1, committed = -1;
@@ -221,9 +268,12 @@ int run(const Arguments &a) {
     const auto start = Clock::now();
     auto last_report = start;
     auto deadline = start + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(a.duration));
-    write_json(out / "config.json", {{"broker", a.broker}, {"topic", a.topic}, {"start_offset", a.start},
+    write_json(out / "config.json", {{"broker", a.broker}, {"topic", a.topic}, {"topic_mode", a.topic_mode},
+        {"offset_scope", single ? "partition" : "global"}, {"partition", single ? json(0) : json(nullptr)}, {"start_offset", a.start},
         {"end_offset", a.bounded ? json(a.end) : json(nullptr)}, {"batch_size", a.batch_size},
-        {"max_batches", a.max_batches}, {"max_bytes", a.max_bytes}, {"isolation_level", a.isolation},
+        {"max_batches", single ? json(nullptr) : json(a.max_batches)}, {"max_bytes", a.max_bytes}, {"isolation_level", a.isolation},
+        {"single_consumer_settings", single ? json(settings) : json(nullptr)},
+        {"single_delivery_strategy", single ? json("wait_one_then_nonblocking_drain") : json(nullptr)},
         {"duration_s", a.duration}, {"fetch_timeout_ms", a.timeout_ms}, {"poll_interval_ms", a.poll_ms},
         {"latency_log", a.latency_log}, {"latency_unit", "ms"}, {"latency_percentile_method", "nearest_rank"}});
     if (!a.ready_file.empty()) {
@@ -240,7 +290,13 @@ int run(const Arguments &a) {
             << ',' << bytes - previous_bytes << ',' << (records - previous_records) * 1000.0 / elapsed_ms
             << ',' << (bytes - previous_bytes) * 1000.0 / elapsed_ms << ',' << fetches - previous_fetches
             << ',' << empty - previous_empty << ',' << local_errors - previous_local << ',' << broker_errors - previous_broker
-            << ',' << next << ',' << committed << '\n';
+            << ',';
+        if (!single) throughput << next;
+        throughput << ',';
+        if (!single) throughput << committed;
+        throughput << ',' << next << ',';
+        if (single) throughput << 0;
+        throughput << '\n';
         if (!throughput || (a.latency_log && !latency) || !errors) throw std::runtime_error("Metric output write failed");
         previous_records = records; previous_bytes = bytes; previous_fetches = fetches;
         previous_empty = empty; previous_local = local_errors; previous_broker = broker_errors;
@@ -251,11 +307,81 @@ int run(const Arguments &a) {
         while (!stopping && Clock::now() < until)
             std::this_thread::sleep_until(std::min(until, Clock::now() + std::chrono::milliseconds(10)));
     };
+    auto collect = [&](int64_t position, int32_t physical_partition, int64_t physical_offset,
+                       const void *payload_data, size_t payload_size, int64_t received_at) {
+        if (position <= last_global || (a.isolation == 0 && position != last_global + 1)) {
+            ++order_errors;
+            throw std::runtime_error("Nonmonotonic/duplicate/gapped " + std::string(single ? "partition offset" : "global sequence"));
+        }
+        last_global = position;
+        ++records;
+        bytes += payload_size;
+        std::string content;
+        int64_t requested_at = -1;
+        if (payload_data) {
+            std::string payload(static_cast<const char *>(payload_data), payload_size);
+            content = adaptor.extract_content(payload);
+            requested_at = adaptor.extract_requested_at(payload);
+        }
+        if (content.empty() || requested_at < 0) { ++invalid; return; }
+        const int64_t latency_ms = received_at - requested_at;
+        if (latency_ms < 0) ++negative;
+        else e2e.add(latency_ms);
+        if (a.latency_log) {
+            latency << csv_quote(content) << (single ? ",SINGLE_FETCH_RECEIVED," : ",GST_FETCH_RECEIVED,")
+                << requested_at << ',' << received_at << ',' << latency_ms << ',';
+            if (!single) latency << position;
+            latency << ',' << physical_partition << ',' << physical_offset << ',' << payload_size << '\n';
+        }
+    };
     try {
         while (!stopping && next < a.end && Clock::now() < deadline) {
             const int64_t end = a.batch_size >= a.end - next ? a.end : next + a.batch_size;
             const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - Clock::now()).count();
             if (remaining <= 0) break;
+            if (single) {
+                MessageBatch messages(static_cast<size_t>(end - next));
+                const auto call_start = Clock::now();
+                messages.values[0] = rd_kafka_consume(partition.topic, 0, static_cast<int>(std::min<int64_t>(a.timeout_ms, remaining)));
+                rd_kafka_resp_err_t api_error = RD_KAFKA_RESP_ERR_NO_ERROR;
+                if (messages.values[0]) {
+                    messages.count = 1;
+                    if (messages.values.size() > 1) {
+                        const auto more = rd_kafka_consume_batch(partition.topic, 0, 0, messages.values.data() + 1, messages.values.size() - 1);
+                        if (more < 0) api_error = rd_kafka_last_error();
+                        else messages.count += static_cast<size_t>(more);
+                    }
+                } else if (rd_kafka_last_error() != RD_KAFKA_RESP_ERR__TIMED_OUT) api_error = rd_kafka_last_error();
+                const int64_t received_at = wall_ms();
+                fetch_time_ms += std::chrono::duration<double, std::milli>(Clock::now() - call_start).count();
+                ++fetches; // Application delivery batches, not background wire Fetch requests.
+                const uint64_t previous_records_count = records;
+                bool had_error = false;
+                auto record_error = [&](rd_kafka_resp_err_t code, const std::string &message) {
+                    had_error = true;
+                    if (code < 0) ++local_errors; else ++broker_errors;
+                    errors << received_at << (code < 0 ? ",local," : ",broker,") << code << ',' << next << ',' << csv_quote(message) << '\n';
+                    if (!retryable(code) || ++consecutive_errors >= a.max_errors) throw std::runtime_error(message);
+                };
+                for (size_t i = 0; i < messages.count; ++i) {
+                    auto *message = messages.values[i];
+                    if (message->err == RD_KAFKA_RESP_ERR__PARTITION_EOF) { ++eof_events; continue; }
+                    if (message->err) { record_error(message->err, rd_kafka_message_errstr(message)); continue; }
+                    if (message->offset >= a.end) { next = a.end; break; }
+                    if (message->offset > next) skipped += message->offset - next;
+                    collect(message->offset, message->partition, message->offset, message->payload, message->len, received_at);
+                    next = message->offset + 1;
+                }
+                if (api_error) record_error(api_error, rd_kafka_err2str(api_error));
+                if (!had_error) consecutive_errors = 0;
+                const auto delivered = records - previous_records_count;
+                max_page_records = std::max(max_page_records, delivered);
+                if (!delivered) ++empty;
+                report(false);
+                rd_kafka_poll(kafka.get(), 0);
+                if (!delivered || had_error) backoff();
+                continue;
+            }
             rd_kafka_global_sequence_page_t *raw = nullptr;
             const auto call_start = Clock::now();
             rd_kafka_error_t *error = rd_kafka_global_sequence_fetch(kafka.get(), a.topic.c_str(), expected.get(),
@@ -283,28 +409,7 @@ int run(const Arguments &a) {
             const int64_t previous = next;
             for (size_t i = 0; i < count; ++i) {
                 const auto &record = values[i];
-                if (record.global_offset <= last_global || (a.isolation == 0 && record.global_offset != last_global + 1)) {
-                    ++order_errors;
-                    throw std::runtime_error("Nonmonotonic/duplicate/gapped global sequence");
-                }
-                last_global = record.global_offset;
-                ++records;
-                bytes += record.len;
-                std::string content;
-                int64_t requested_at = -1;
-                if (record.payload) {
-                    std::string payload(static_cast<const char *>(record.payload), record.len);
-                    content = adaptor.extract_content(payload);
-                    requested_at = adaptor.extract_requested_at(payload);
-                }
-                if (content.empty() || requested_at < 0) { ++invalid; continue; }
-                const int64_t latency_ms = received_at - requested_at;
-                if (latency_ms < 0) ++negative;
-                else e2e.add(latency_ms);
-                if (a.latency_log)
-                    latency << csv_quote(content) << ",GST_FETCH_RECEIVED," << requested_at << ',' << received_at
-                        << ',' << latency_ms << ',' << record.global_offset << ',' << record.physical_partition
-                        << ',' << record.physical_offset << ',' << record.len << '\n';
+                collect(record.global_offset, record.physical_partition, record.physical_offset, record.payload, record.len, received_at);
             }
             next = info->next_global_offset; // Also advance empty read_committed/aborted pages.
             if (next < previous || next > end) throw std::runtime_error("Invalid continuation cursor");
@@ -338,16 +443,22 @@ int run(const Arguments &a) {
     errors.close();
     if (!throughput || (a.latency_log && !latency) || !errors) throw std::runtime_error("Metric output flush failed");
     json summary = {{"status", status}, {"reason", failure}, {"topic", a.topic},
+        {"topic_mode", a.topic_mode}, {"offset_scope", single ? "partition" : "global"},
+        {"partition", single ? json(0) : json(nullptr)},
+        {"start_offset", a.start}, {"end_offset", a.bounded ? json(a.end) : json(nullptr)}, {"next_offset", next},
         {"topic_id", expected ? json(rd_kafka_Uuid_base64str(expected.get())) : json(nullptr)},
         {"started_at", started_at}, {"finished_at", wall_ms()}, {"elapsed_s", elapsed},
-        {"batch_size", a.batch_size}, {"max_batches", a.max_batches}, {"max_bytes", a.max_bytes},
-        {"start_global_offset", a.start}, {"end_global_offset", a.bounded ? json(a.end) : json(nullptr)},
-        {"next_global_offset", next}, {"completed_range", completed}, {"committed_global_end_offset", committed},
+        {"batch_size", a.batch_size}, {"max_batches", single ? json(nullptr) : json(a.max_batches)}, {"max_bytes", a.max_bytes},
+        {"start_global_offset", single ? json(nullptr) : json(a.start)},
+        {"end_global_offset", a.bounded && !single ? json(a.end) : json(nullptr)},
+        {"next_global_offset", single ? json(nullptr) : json(next)}, {"completed_range", completed},
+        {"committed_global_end_offset", single ? json(nullptr) : json(committed)},
         {"consumed_records", records}, {"payload_bytes", bytes}, {"throughput_records_per_sec", records / elapsed},
         {"throughput_payload_bytes_per_sec", bytes / elapsed}, {"fetch_calls", fetches}, {"empty_pages", empty},
         {"local_errors", local_errors}, {"broker_errors", broker_errors}, {"fetch_time_ms", fetch_time_ms},
         {"fetch_call_mean_ms", fetches ? json(fetch_time_ms / fetches) : json(nullptr)},
-        {"max_page_records", max_page_records}, {"skipped_global_positions", skipped},
+        {"max_page_records", max_page_records}, {"skipped_global_positions", single ? json(nullptr) : json(skipped)},
+        {"skipped_partition_positions", single ? json(skipped) : json(nullptr)}, {"partition_eof_events", eof_events},
         {"invalid_payload_records", invalid}, {"negative_latency_records", negative}, {"order_errors", order_errors},
         {"latency", e2e.summary()}};
     write_json(out / "summary.json", summary);
