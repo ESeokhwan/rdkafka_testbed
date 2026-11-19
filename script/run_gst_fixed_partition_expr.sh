@@ -41,11 +41,11 @@ usage() {
     cat <<'EOF'
 Usage: run_gst_fixed_partition_expr.sh [options]
 
-Hold P and the per-client interval fixed; increase client count C (C >= P).
+Hold topic partition count P and the per-client interval fixed; increase client count C.
 The existing producer app is used unchanged, asynchronously with acks=0.
 
   --broker HOST:PORT          Bootstrap broker (default: 166.104.110.13:9092)
-  --partitions P              Fixed physical/active P for normal and GST (16)
+  --partitions P              Fixed topic partition count for normal and GST (16)
   --clients C1,C2,...          Increasing client counts (16,32,64,128,160,192)
   --interval MS               Fixed per-client nominal interval (3)
   --messages-per-client N     Attempts per client; total --msg-cnt is C*N (20000)
@@ -74,7 +74,7 @@ The existing producer app is used unchanged, asynchronously with acks=0.
 
 Topics must match P, replication factor and GST mode. --create-topics uses
 --if-not-exists and does not change an existing topic with different settings.
-Single mode uses P=1. Client counts must be >= P when normal/GST is selected.
+Single mode uses P=1. Producers send to the first min(C, P) partitions.
 Interval noise is fixed to zero. Runtime is count-based, not a fixed duration.
 Actual rates and sustainable capacity are not inferred from the settings.
 
@@ -161,13 +161,12 @@ GST_TOPIC=${GST_TOPIC:-test_gs_topic_p$PARTITIONS}
 TOPICS_COMMAND="$KAFKA_BIN/kafka-topics.sh"
 EXTENSION_COMMAND="$KAFKA_BIN/kafka-broker-extension.sh"
 
-required_clients=1
 seen_modes=,
 seen_topics=,
 for mode in "${MODES[@]}"; do
     case "$mode" in
-        normal) required_clients=$PARTITIONS; topic=$NORMAL_TOPIC ;;
-        gst) required_clients=$PARTITIONS; topic=$GST_TOPIC ;;
+        normal) topic=$NORMAL_TOPIC ;;
+        gst) topic=$GST_TOPIC ;;
         single) topic=$SINGLE_TOPIC ;;
         *) die "Unknown mode: $mode" ;;
     esac
@@ -182,7 +181,6 @@ previous_clients=0
 for clients in "${CLIENT_COUNTS[@]}"; do
     positive_int clients "$clients"
     (( clients > previous_clients )) || die "clients must be strictly increasing"
-    (( CLEANUP_ONLY || clients >= required_clients )) || die "clients must be >= $required_clients to keep a fixed per-client rate"
     (( clients <= 2147483647 / MESSAGES_PER_CLIENT )) || die "C * messages-per-client exceeds the producer's --msg-cnt range"
     previous_clients=$clients
 done
@@ -472,7 +470,8 @@ run_experiment() {
     elif ! run_hook before_produce "$run_dir"; then
         reason=before_produce_hook_failed
     else
-        local producer_command=("$PRODUCER" --broker "$BROKER" --prefix "${RECORD_PREFIX:-$topic}" --partition-cnt "$partitions" --client-cnt "$clients" --interval "$INTERVAL_MS" --interval-noise-stddev 0 --msg-cnt "$total_msgs" --msg-size "$MESSAGE_SIZE" --start-barrier-delay "$START_BARRIER_DELAY" --ignore-response)
+        local producer_partitions=$(( clients < partitions ? clients : partitions ))
+        local producer_command=("$PRODUCER" --broker "$BROKER" --prefix "${RECORD_PREFIX:-$topic}" --partition-cnt "$producer_partitions" --client-cnt "$clients" --interval "$INTERVAL_MS" --interval-noise-stddev 0 --msg-cnt "$total_msgs" --msg-size "$MESSAGE_SIZE" --start-barrier-delay "$START_BARRIER_DELAY" --ignore-response)
         if (( SAMPLE_LOG )); then producer_command+=(--sample-log); fi
         producer_command+=(--tag-record --scrapable --verbose)
         if [[ -n "$RECORD_PREFIX" ]]; then producer_command+=(--topic-name "$topic"); fi

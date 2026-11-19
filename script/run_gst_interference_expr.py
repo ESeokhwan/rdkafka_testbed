@@ -108,8 +108,6 @@ def parse_args():
         p.error("invalid CSV timing or replication factor")
     if not 0 <= a.start_barrier_delay <= 2147483647 or not 0 <= a.drain_wait <= 2147483647:
         p.error("startup/drain waits must be in 0..2147483647")
-    if any(case in a.cases for case in ("normal", "gst")) and min(a.a_clients) < a.partitions:
-        p.error("every A client count must be >= A partitions")
     a.a_normal_topic = a.a_normal_topic or "impact_a_normal_p{}".format(a.partitions)
     a.a_gst_topic = a.a_gst_topic or "impact_a_gst_p{}".format(a.partitions)
     topics = [a.b_topic] + [getattr(a, "a_" + case + "_topic") for case in a.cases if case != "baseline"]
@@ -158,8 +156,9 @@ class Experiment:
 
     def a_command(self, case, prefix, clients):
         a = self.args
+        producer_partitions = min(clients, self.a_partitions(case))
         return [str(a.producer), "--broker", a.broker, "--topic-name", self.a_topic(case),
-                "--prefix", "load_A_" + prefix, "--partition-cnt", str(self.a_partitions(case)),
+                "--prefix", "load_A_" + prefix, "--partition-cnt", str(producer_partitions),
                 "--client-cnt", str(clients), "--interval", str(a.a_interval),
                 "--interval-noise-stddev", "0", "--msg-cnt", str(clients * a.a_messages_per_client),
                 "--msg-size", str(a.message_size), "--start-barrier-delay", str(a.start_barrier_delay),

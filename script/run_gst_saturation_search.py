@@ -297,9 +297,9 @@ def parse_args():
         p.error("broker-log-dir and output-root must be separate directory trees")
     a.combinations = list(dict.fromkeys((mode, 1 if mode == "single" else partitions) for partitions in a.partitions for mode in a.modes))
     a.max_clients = a.max_clients // STEP * STEP
+    if a.max_clients < STEP:
+        p.error("max-clients must be at least {}".format(STEP))
     for mode, partitions in a.combinations:
-        if a.max_clients < ceil_grid(partitions):
-            p.error("max-clients is below the minimum C>=P on the 10-client grid")
         try:
             topic = a.single_topic if mode == "single" else getattr(a, mode + "_topic_template").format(p=partitions)
         except (KeyError, ValueError, IndexError, AttributeError) as error:
@@ -517,8 +517,7 @@ class Search:
 
     def search(self, mode, partitions):
         a = self.args
-        minimum = ceil_grid(partitions)
-        start = min(a.max_clients, max(minimum, ceil_grid(a.start_clients)))
+        start = min(a.max_clients, ceil_grid(a.start_clients))
         cache, low, high = {}, None, None
         boundary = dict(mode=mode, partitions=partitions, client_step=STEP, min_ratio=a.min_ratio,
                         status="ERROR", last_good_clients=None, first_saturated_clients=None,
@@ -528,8 +527,8 @@ class Search:
             point = self.probe(mode, partitions, start, "coarse", cache)
             if point["saturated"]:
                 high = start
-                while high > minimum:
-                    candidate = max(minimum, math.floor(high / a.growth_factor / STEP) * STEP)
+                while high > STEP:
+                    candidate = max(STEP, math.floor(high / a.growth_factor / STEP) * STEP)
                     candidate = min(high - STEP, candidate)
                     if self.probe(mode, partitions, candidate, "coarse_down", cache)["saturated"]:
                         high = candidate
@@ -585,7 +584,7 @@ class Search:
         print("Saturated: average / (C*1000/interval_ms) < {}; grid={} clients".format(a.min_ratio, STEP))
         if a.dry_run:
             for mode, partitions in a.combinations:
-                start = min(a.max_clients, max(ceil_grid(partitions), ceil_grid(a.start_clients)))
+                start = min(a.max_clients, ceil_grid(a.start_clients))
                 print("{} P={}: start C={}, grow x{}, cap C={}; then binary search".format(mode, partitions, start, a.growth_factor, a.max_clients))
                 print(" ".join(shlex.quote(part) for part in self.command(mode, partitions, start, a.output_root / "dry-run")))
                 if a.delete_topics_after:

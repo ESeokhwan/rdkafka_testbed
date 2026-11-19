@@ -115,9 +115,8 @@ def parse_args():
     p.add_argument("--no-latency-log", action="store_true", help="keep exact consumer summary/histogram, skip per-record CSV")
     p.add_argument("--dry-run", action="store_true")
     a = p.parse_args()
-    required_clients = a.partitions if "gst" in a.topic_modes else 1
-    if min(a.clients) < required_clients or not 0 < a.interval < 1e9:
-        p.error("need every client count >= selected topic partitions and 0 < interval < 1e9 ms")
+    if not 0 < a.interval < 1e9:
+        p.error("interval must be positive and < 1e9 ms")
     if max(a.clients) > 2147483647 // a.messages_per_client:
         p.error("total producer attempt count exceeds the existing app limit")
     if a.max_batches > 1000 or a.max_bytes > 16646144 or a.replication_factor > 32767:
@@ -189,8 +188,9 @@ class Experiment:
 
     def commands(self, directory, topic, size, clients, topic_mode):
         a = self.args
+        producer_partitions = min(clients, self.partitions_for(topic_mode))
         producer = [str(a.producer), "--broker", a.broker, "--topic-name", topic, "--prefix", topic,
-                    "--partition-cnt", str(self.partitions_for(topic_mode)), "--client-cnt", str(clients),
+                    "--partition-cnt", str(producer_partitions), "--client-cnt", str(clients),
                     "--interval", str(a.interval), "--interval-noise-stddev", "0",
                     "--msg-cnt", str(clients * a.messages_per_client), "--msg-size", str(a.message_size),
                     "--start-barrier-delay", str(a.start_barrier_delay), "--ignore-response", "--sample-log"]
