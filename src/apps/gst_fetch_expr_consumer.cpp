@@ -14,6 +14,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -202,7 +203,10 @@ int run(const Arguments &a) {
     throughput.rdbuf()->pubsetbuf(throughput_buffer.data(), throughput_buffer.size());
     throughput.open(out / "throughput.csv");
     if (!throughput) throw std::runtime_error("Cannot open throughput.csv");
-    throughput << "measured_at,measurement_duration_ms,consumed_records,payload_bytes,throughput_records_per_sec,throughput_payload_bytes_per_sec,fetch_calls,empty_pages,local_errors,broker_errors,next_global_offset,committed_global_end_offset,next_offset,partition\n";
+    throughput << "measured_at,measurement_duration_ms,consumed_records,payload_bytes,"
+        "throughput_records_per_sec,throughput_payload_bytes_per_sec,fetch_calls,empty_pages,local_errors,broker_errors,"
+        "next_global_offset,committed_global_end_offset,next_offset,partition,"
+        "nonempty_fetch_samples,nonempty_fetch_total_ms,post_fetch_samples,post_fetch_total_ms\n";
     if (a.latency_log) {
         latency.open(out / "latency.csv");
         if (!latency) throw std::runtime_error("Cannot open latency.csv");
@@ -263,6 +267,9 @@ int run(const Arguments &a) {
     int64_t next = a.start, last_global = a.start - 1, committed = -1;
     int consecutive_errors = 0;
     double fetch_time_ms = 0;
+    uint64_t nonempty_fetch_samples = 0, post_fetch_samples = 0;
+    double nonempty_fetch_total_ms = 0, post_fetch_total_ms = 0;
+    std::optional<Clock::time_point> nonempty_fetch_returned_at;
     std::string failure;
     const int64_t started_at = wall_ms();
     const auto start = Clock::now();
@@ -295,11 +302,15 @@ int run(const Arguments &a) {
         throughput << ',';
         if (!single) throughput << committed;
         throughput << ',' << next << ',';
-        if (single) throughput << 0;
+        if (single) throughput << "0,,,,";
+        else throughput << ',' << nonempty_fetch_samples << ',' << nonempty_fetch_total_ms
+            << ',' << post_fetch_samples << ',' << post_fetch_total_ms;
         throughput << '\n';
         if (!throughput || (a.latency_log && !latency) || !errors) throw std::runtime_error("Metric output write failed");
         previous_records = records; previous_bytes = bytes; previous_fetches = fetches;
         previous_empty = empty; previous_local = local_errors; previous_broker = broker_errors;
+        nonempty_fetch_samples = post_fetch_samples = 0;
+        nonempty_fetch_total_ms = post_fetch_total_ms = 0;
         last_report = now;
     };
     auto backoff = [&]() {
@@ -386,9 +397,17 @@ int run(const Arguments &a) {
             const auto call_start = Clock::now();
             rd_kafka_error_t *error = rd_kafka_global_sequence_fetch(kafka.get(), a.topic.c_str(), expected.get(),
                 next, end, &options, &raw, static_cast<int>(std::min<int64_t>(a.timeout_ms, remaining)));
+            const auto call_return = Clock::now();
             const int64_t received_at = wall_ms(); // Receive time precedes payload parsing and log writes.
-            fetch_time_ms += std::chrono::duration<double, std::milli>(Clock::now() - call_start).count();
+            const double call_ms = std::chrono::duration<double, std::milli>(call_return - call_start).count();
+            fetch_time_ms += call_ms;
             ++fetches;
+            // Record the gap only once the next call has actually started.
+            if (nonempty_fetch_returned_at) {
+                post_fetch_total_ms += std::chrono::duration<double, std::milli>(call_start - *nonempty_fetch_returned_at).count();
+                ++post_fetch_samples;
+                nonempty_fetch_returned_at.reset();
+            }
             if (error) {
                 ++local_errors;
                 const auto code = rd_kafka_error_code(error);
@@ -405,6 +424,11 @@ int run(const Arguments &a) {
             if (!expected && info->topic_id) expected.reset(rd_kafka_Uuid_copy(info->topic_id));
             size_t count = 0;
             const auto *values = rd_kafka_global_sequence_page_records(page.get(), &count);
+            if (count) {
+                ++nonempty_fetch_samples;
+                nonempty_fetch_total_ms += call_ms;
+                nonempty_fetch_returned_at = call_return;
+            }
             max_page_records = std::max<uint64_t>(max_page_records, count);
             const int64_t previous = next;
             for (size_t i = 0; i < count; ++i) {
@@ -415,14 +439,16 @@ int run(const Arguments &a) {
             if (next < previous || next > end) throw std::runtime_error("Invalid continuation cursor");
             if (next - previous >= static_cast<int64_t>(count)) skipped += next - previous - count;
             if (info->has_snapshot) committed = info->committed_global_end_offset;
-            if (!count) ++empty;
             if (info->error) {
                 ++broker_errors;
                 const std::string message = info->error_string ? info->error_string : rd_kafka_err2str(info->error);
                 errors << received_at << ",broker," << info->error << ',' << next << ',' << csv_quote(message) << '\n';
                 // The valid prefix above was delivered once. Retry only from next.
                 if (!retryable(info->error) || ++consecutive_errors >= a.max_errors) throw std::runtime_error(message);
-            } else consecutive_errors = 0;
+            } else {
+                if (!count) ++empty;
+                consecutive_errors = 0;
+            }
             report(false);
             rd_kafka_poll(kafka.get(), 0);
             if (next == previous || info->transaction_pending || info->error) backoff();
