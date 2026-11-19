@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cmath>
 #include <csignal>
+#include <condition_variable>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -14,15 +15,18 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 using json = nlohmann::json;
 using Clock = std::chrono::steady_clock;
 using Page = std::unique_ptr<rd_kafka_global_sequence_page_t, decltype(&rd_kafka_global_sequence_page_destroy)>;
+using FetchError = std::unique_ptr<rd_kafka_error_t, decltype(&rd_kafka_error_destroy)>;
 using Uuid = std::unique_ptr<rd_kafka_Uuid_t, decltype(&rd_kafka_Uuid_destroy)>;
 using Kafka = std::unique_ptr<rd_kafka_t, decltype(&rd_kafka_destroy)>;
 
@@ -38,7 +42,7 @@ int64_t wall_ms() {
 struct Arguments {
     std::string broker = "166.104.110.13:9092", topic, output, ready_file, topic_mode = "gst";
     int64_t start = 0, end = std::numeric_limits<int64_t>::max(), batch_size = 1000;
-    bool bounded = false, latency_log = true;
+    bool bounded = false, latency_log = true, prefetch = false;
     int max_batches = 1000, max_bytes = 1048576, isolation = 0;
     int timeout_ms = 10000, poll_ms = 1, interval_ms = 1000, max_errors = 10;
     double duration = 60;
@@ -60,6 +64,115 @@ struct MessageBatch {
     ~MessageBatch() {
         for (size_t i = 0; i < count; ++i) rd_kafka_message_destroy(values[i]);
     }
+};
+
+double ms_between(Clock::time_point start, Clock::time_point end) {
+    return std::chrono::duration<double, std::milli>(end - start).count();
+}
+
+struct Timing {
+    uint64_t samples = 0;
+    double total_ms = 0;
+
+    void add(double ms) {
+        ++samples;
+        total_ms += ms;
+    }
+};
+
+struct FetchRequest {
+    int64_t start, end;
+    const rd_kafka_Uuid_t *topic_id;
+};
+
+struct FetchResult {
+    Page page{nullptr, rd_kafka_global_sequence_page_destroy};
+    FetchError error{nullptr, rd_kafka_error_destroy};
+    Clock::time_point started, returned;
+    int64_t received_at = 0;
+};
+
+struct GstFetcher {
+    rd_kafka_t *kafka;
+    const Arguments &args;
+    const rd_kafka_global_sequence_fetch_options_t &options;
+    Clock::time_point deadline;
+
+    FetchResult fetch(const FetchRequest &request) const {
+        FetchResult result;
+        rd_kafka_global_sequence_page_t *raw = nullptr;
+        const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - Clock::now()).count();
+        if (remaining <= 0) return result;
+        const int timeout = static_cast<int>(std::min<int64_t>(args.timeout_ms, remaining));
+        result.started = Clock::now();
+        auto *error = rd_kafka_global_sequence_fetch(kafka, args.topic.c_str(), request.topic_id,
+            request.start, request.end, &options, &raw, timeout);
+        result.returned = Clock::now();
+        result.received_at = wall_ms();
+        result.page.reset(raw);
+        result.error.reset(error);
+        return result;
+    }
+};
+
+class PrefetchWorker {
+public:
+    explicit PrefetchWorker(const GstFetcher &fetcher) : fetcher_(fetcher), thread_([this] { run(); }) {}
+
+    ~PrefetchWorker() {
+        stop();
+        thread_.join();
+    }
+
+    void submit(FetchRequest request) {
+        {
+            std::lock_guard lock(mutex_);
+            if (request_ || result_) throw std::logic_error("GST prefetch slot is occupied");
+            request_ = request;
+        }
+        changed_.notify_one();
+    }
+
+    FetchResult take() {
+        std::unique_lock lock(mutex_);
+        changed_.wait(lock, [this] { return result_.has_value(); });
+        auto result = std::move(*result_);
+        result_.reset();
+        return result;
+    }
+
+    void stop() {
+        {
+            std::lock_guard lock(mutex_);
+            stopped_ = true;
+        }
+        changed_.notify_one();
+    }
+
+private:
+    void run() {
+        std::unique_lock lock(mutex_);
+        for (;;) {
+            changed_.wait(lock, [this] { return stopped_ || request_.has_value(); });
+            if (stopped_) return;
+            const auto request = *request_;
+            lock.unlock();
+            auto result = fetcher_.fetch(request);
+            lock.lock();
+            if (stopped_) return;
+            request_.reset();
+            result_.emplace(std::move(result));
+            changed_.notify_one();
+        }
+    }
+
+    const GstFetcher &fetcher_;
+    std::mutex mutex_;
+    std::condition_variable changed_;
+    std::optional<FetchRequest> request_;
+    std::optional<FetchResult> result_;
+    bool stopped_ = false;
+    std::thread thread_;
 };
 
 int64_t integer(const std::string &text, const std::string &name, int64_t minimum,
@@ -87,6 +200,7 @@ void usage() {
         "  --fetch-timeout-ms N        Deadline per API call (10000)\n"
         "  --poll-interval-ms N        Backoff after no progress/errors (1)\n"
         "  --metrics-interval-ms N     Throughput reporting interval (1000)\n"
+        "  --prefetch on|off          Overlap GST processing with one Fetch (off)\n"
         "  --max-consecutive-errors N  Retriable errors before failure (10)\n"
         "  --no-latency-log            Keep exact aggregate latency statistics only\n"
         "  --ready-file PATH          Write after local client/output initialization\n";
@@ -110,6 +224,10 @@ Arguments parse(int argc, char **argv) {
         else if (option == "--max-batches") a.max_batches = static_cast<int>(integer(value, option, 1, 1000));
         else if (option == "--max-bytes") a.max_bytes = static_cast<int>(integer(value, option, 1, 16646144));
         else if (option == "--isolation-level") a.isolation = static_cast<int>(integer(value, option, 0, 1));
+        else if (option == "--prefetch") {
+            if (value != "on" && value != "off") throw std::runtime_error("prefetch must be on or off");
+            a.prefetch = value == "on";
+        }
         else if (option == "--fetch-timeout-ms") a.timeout_ms = static_cast<int>(integer(value, option, 1, 2147483647));
         else if (option == "--poll-interval-ms") a.poll_ms = static_cast<int>(integer(value, option, 0, 2147483647));
         else if (option == "--metrics-interval-ms") a.interval_ms = static_cast<int>(integer(value, option, 1, 2147483647));
@@ -124,6 +242,7 @@ Arguments parse(int argc, char **argv) {
     if (a.topic.empty() || a.broker.empty() || a.output.empty() || a.end < a.start)
         throw std::runtime_error("Need topic, broker, output-dir and a valid offset range");
     if (a.topic_mode != "gst" && a.topic_mode != "single") throw std::runtime_error("Invalid topic-mode");
+    if (a.topic_mode == "single" && a.prefetch) throw std::runtime_error("prefetch requires GST mode");
     if (a.topic_mode == "single" && (a.batch_size > 2147483647 || a.max_bytes < 1000))
         throw std::runtime_error("single mode needs batch-size <= 2147483647 and max-bytes >= 1000");
     return a;
@@ -206,7 +325,9 @@ int run(const Arguments &a) {
     throughput << "measured_at,measurement_duration_ms,consumed_records,payload_bytes,"
         "throughput_records_per_sec,throughput_payload_bytes_per_sec,fetch_calls,empty_pages,local_errors,broker_errors,"
         "next_global_offset,committed_global_end_offset,next_offset,partition,"
-        "nonempty_fetch_samples,nonempty_fetch_total_ms,post_fetch_samples,post_fetch_total_ms\n";
+        "nonempty_fetch_samples,nonempty_fetch_total_ms,post_fetch_samples,post_fetch_total_ms,"
+        "fetch_wait_samples,fetch_wait_total_ms,page_process_samples,page_process_total_ms,"
+        "consume_cycle_samples,consume_cycle_total_ms\n";
     if (a.latency_log) {
         latency.open(out / "latency.csv");
         if (!latency) throw std::runtime_error("Cannot open latency.csv");
@@ -267,19 +388,21 @@ int run(const Arguments &a) {
     int64_t next = a.start, last_global = a.start - 1, committed = -1;
     int consecutive_errors = 0;
     double fetch_time_ms = 0;
-    uint64_t nonempty_fetch_samples = 0, post_fetch_samples = 0;
-    double nonempty_fetch_total_ms = 0, post_fetch_total_ms = 0;
-    std::optional<Clock::time_point> nonempty_fetch_returned_at;
+    Timing nonempty_fetch, post_fetch, fetch_wait, page_process, consume_cycle;
+    std::optional<Clock::time_point> nonempty_fetch_returned_at, previous_page_processed_at;
     std::string failure;
     const int64_t started_at = wall_ms();
     const auto start = Clock::now();
     auto last_report = start;
-    auto deadline = start + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(a.duration));
+    const auto deadline = start + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(a.duration));
+    const GstFetcher fetcher{kafka.get(), a, options, deadline};
+    std::optional<PrefetchWorker> prefetch;
+    if (a.prefetch) prefetch.emplace(fetcher);
     write_json(out / "config.json", {{"broker", a.broker}, {"topic", a.topic}, {"topic_mode", a.topic_mode},
         {"offset_scope", single ? "partition" : "global"}, {"partition", single ? json(0) : json(nullptr)}, {"start_offset", a.start},
         {"end_offset", a.bounded ? json(a.end) : json(nullptr)}, {"batch_size", a.batch_size},
         {"max_batches", single ? json(nullptr) : json(a.max_batches)}, {"max_bytes", a.max_bytes}, {"isolation_level", a.isolation},
-        {"single_consumer_settings", single ? json(settings) : json(nullptr)},
+        {"prefetch", a.prefetch}, {"single_consumer_settings", single ? json(settings) : json(nullptr)},
         {"single_delivery_strategy", single ? json("wait_one_then_nonblocking_drain") : json(nullptr)},
         {"duration_s", a.duration}, {"fetch_timeout_ms", a.timeout_ms}, {"poll_interval_ms", a.poll_ms},
         {"latency_log", a.latency_log}, {"latency_unit", "ms"}, {"latency_percentile_method", "nearest_rank"}});
@@ -302,15 +425,18 @@ int run(const Arguments &a) {
         throughput << ',';
         if (!single) throughput << committed;
         throughput << ',' << next << ',';
-        if (single) throughput << "0,,,,";
-        else throughput << ',' << nonempty_fetch_samples << ',' << nonempty_fetch_total_ms
-            << ',' << post_fetch_samples << ',' << post_fetch_total_ms;
+        if (single) throughput << 0;
+        for (auto *timing : {&nonempty_fetch, &post_fetch, &fetch_wait, &page_process, &consume_cycle}) {
+            throughput << ',';
+            if (!single) throughput << timing->samples;
+            throughput << ',';
+            if (!single) throughput << timing->total_ms;
+            *timing = {};
+        }
         throughput << '\n';
         if (!throughput || (a.latency_log && !latency) || !errors) throw std::runtime_error("Metric output write failed");
         previous_records = records; previous_bytes = bytes; previous_fetches = fetches;
         previous_empty = empty; previous_local = local_errors; previous_broker = broker_errors;
-        nonempty_fetch_samples = post_fetch_samples = 0;
-        nonempty_fetch_total_ms = post_fetch_total_ms = 0;
         last_report = now;
     };
     auto backoff = [&]() {
@@ -345,12 +471,19 @@ int run(const Arguments &a) {
             latency << ',' << physical_partition << ',' << physical_offset << ',' << payload_size << '\n';
         }
     };
+    const auto page_end = [&](int64_t offset) {
+        return a.batch_size >= a.end - offset ? a.end : offset + a.batch_size;
+    };
+    const auto fetch_request = [&](int64_t offset) {
+        return FetchRequest{offset, page_end(offset), expected.get()};
+    };
+    bool prefetch_submitted = false;
     try {
         while (!stopping && next < a.end && Clock::now() < deadline) {
-            const int64_t end = a.batch_size >= a.end - next ? a.end : next + a.batch_size;
-            const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - Clock::now()).count();
-            if (remaining <= 0) break;
             if (single) {
+                const auto end = page_end(next);
+                const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - Clock::now()).count();
+                if (remaining <= 0) break;
                 MessageBatch messages(static_cast<size_t>(end - next));
                 const auto call_start = Clock::now();
                 messages.values[0] = rd_kafka_consume(partition.topic, 0, static_cast<int>(std::min<int64_t>(a.timeout_ms, remaining)));
@@ -393,68 +526,84 @@ int run(const Arguments &a) {
                 if (!delivered || had_error) backoff();
                 continue;
             }
-            rd_kafka_global_sequence_page_t *raw = nullptr;
-            const auto call_start = Clock::now();
-            rd_kafka_error_t *error = rd_kafka_global_sequence_fetch(kafka.get(), a.topic.c_str(), expected.get(),
-                next, end, &options, &raw, static_cast<int>(std::min<int64_t>(a.timeout_ms, remaining)));
-            const auto call_return = Clock::now();
-            const int64_t received_at = wall_ms(); // Receive time precedes payload parsing and log writes.
-            const double call_ms = std::chrono::duration<double, std::milli>(call_return - call_start).count();
+            const auto request = fetch_request(next);
+            const auto wait_started = Clock::now();
+            if (prefetch && !prefetch_submitted) prefetch->submit(request);
+            auto result = prefetch ? prefetch->take() : fetcher.fetch(request);
+            const auto process_started = Clock::now();
+            prefetch_submitted = false;
+            if (!result.page && !result.error) break;
+            const int64_t received_at = result.received_at;
+            const double call_ms = ms_between(result.started, result.returned);
             fetch_time_ms += call_ms;
             ++fetches;
             // Record the gap only once the next call has actually started.
             if (nonempty_fetch_returned_at) {
-                post_fetch_total_ms += std::chrono::duration<double, std::milli>(call_start - *nonempty_fetch_returned_at).count();
-                ++post_fetch_samples;
+                post_fetch.add(ms_between(*nonempty_fetch_returned_at, result.started));
                 nonempty_fetch_returned_at.reset();
             }
-            if (error) {
+            if (result.error) {
                 ++local_errors;
-                const auto code = rd_kafka_error_code(error);
-                const std::string message = rd_kafka_error_string(error);
-                rd_kafka_error_destroy(error);
+                const auto code = rd_kafka_error_code(result.error.get());
+                const std::string message = rd_kafka_error_string(result.error.get());
                 errors << received_at << ",local," << code << ',' << next << ',' << csv_quote(message) << '\n';
                 report(false);
                 if (!retryable(code) || ++consecutive_errors >= a.max_errors) throw std::runtime_error(message);
                 backoff();
                 continue;
             }
-            Page page(raw, rd_kafka_global_sequence_page_destroy);
-            const auto *info = rd_kafka_global_sequence_page_info(page.get());
+            const auto *info = rd_kafka_global_sequence_page_info(result.page.get());
             if (!expected && info->topic_id) expected.reset(rd_kafka_Uuid_copy(info->topic_id));
             size_t count = 0;
-            const auto *values = rd_kafka_global_sequence_page_records(page.get(), &count);
+            const auto *values = rd_kafka_global_sequence_page_records(result.page.get(), &count);
             if (count) {
-                ++nonempty_fetch_samples;
-                nonempty_fetch_total_ms += call_ms;
-                nonempty_fetch_returned_at = call_return;
+                nonempty_fetch.add(call_ms);
+                fetch_wait.add(prefetch ? ms_between(wait_started, process_started) : call_ms);
+                nonempty_fetch_returned_at = result.returned;
             }
             max_page_records = std::max<uint64_t>(max_page_records, count);
             const int64_t previous = next;
+            const auto page_next = info->next_global_offset;
+            if (page_next < previous || page_next > request.end) throw std::runtime_error("Invalid continuation cursor");
+            const bool needs_backoff = page_next == previous || info->transaction_pending || info->error;
+            if (prefetch && !needs_backoff && !stopping && page_next < a.end && Clock::now() < deadline) {
+                prefetch->submit(fetch_request(page_next));
+                prefetch_submitted = true;
+            }
             for (size_t i = 0; i < count; ++i) {
                 const auto &record = values[i];
                 collect(record.global_offset, record.physical_partition, record.physical_offset, record.payload, record.len, received_at);
             }
-            next = info->next_global_offset; // Also advance empty read_committed/aborted pages.
-            if (next < previous || next > end) throw std::runtime_error("Invalid continuation cursor");
+            next = page_next; // Also advance empty read_committed/aborted pages.
             if (next - previous >= static_cast<int64_t>(count)) skipped += next - previous - count;
             if (info->has_snapshot) committed = info->committed_global_end_offset;
+            bool terminal_error = false;
             if (info->error) {
                 ++broker_errors;
                 const std::string message = info->error_string ? info->error_string : rd_kafka_err2str(info->error);
                 errors << received_at << ",broker," << info->error << ',' << next << ',' << csv_quote(message) << '\n';
                 // The valid prefix above was delivered once. Retry only from next.
-                if (!retryable(info->error) || ++consecutive_errors >= a.max_errors) throw std::runtime_error(message);
+                terminal_error = !retryable(info->error) || ++consecutive_errors >= a.max_errors;
+                if (terminal_error) failure = message;
             } else {
                 if (!count) ++empty;
                 consecutive_errors = 0;
             }
+            result.page.reset();
+            if (count) {
+                const auto processed_at = Clock::now();
+                page_process.add(ms_between(process_started, processed_at));
+                if (previous_page_processed_at) consume_cycle.add(ms_between(*previous_page_processed_at, processed_at));
+                previous_page_processed_at = processed_at;
+            }
+            if (terminal_error) break;
             report(false);
             rd_kafka_poll(kafka.get(), 0);
-            if (next == previous || info->transaction_pending || info->error) backoff();
+            if (needs_backoff) backoff();
         }
     } catch (const std::exception &error) { failure = error.what(); }
     const auto finish = Clock::now();
+    if (prefetch) prefetch->stop();
     const double elapsed = std::max(0.000001, std::chrono::duration<double>(finish - start).count());
     const bool completed = a.bounded && next >= a.end;
     std::string status = "SUCCESS";
@@ -468,12 +617,14 @@ int run(const Arguments &a) {
     if (a.latency_log) latency.close();
     errors.close();
     if (!throughput || (a.latency_log && !latency) || !errors) throw std::runtime_error("Metric output flush failed");
+    const auto finished_at = wall_ms();
+    prefetch.reset(); // Join before accessing the shared topic UUID or destroying the Kafka handle.
     json summary = {{"status", status}, {"reason", failure}, {"topic", a.topic},
-        {"topic_mode", a.topic_mode}, {"offset_scope", single ? "partition" : "global"},
+        {"topic_mode", a.topic_mode}, {"prefetch", a.prefetch}, {"offset_scope", single ? "partition" : "global"},
         {"partition", single ? json(0) : json(nullptr)},
         {"start_offset", a.start}, {"end_offset", a.bounded ? json(a.end) : json(nullptr)}, {"next_offset", next},
         {"topic_id", expected ? json(rd_kafka_Uuid_base64str(expected.get())) : json(nullptr)},
-        {"started_at", started_at}, {"finished_at", wall_ms()}, {"elapsed_s", elapsed},
+        {"started_at", started_at}, {"finished_at", finished_at}, {"elapsed_s", elapsed},
         {"batch_size", a.batch_size}, {"max_batches", single ? json(nullptr) : json(a.max_batches)}, {"max_bytes", a.max_bytes},
         {"start_global_offset", single ? json(nullptr) : json(a.start)},
         {"end_global_offset", a.bounded && !single ? json(a.end) : json(nullptr)},

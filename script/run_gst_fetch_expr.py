@@ -95,6 +95,8 @@ def parse_args():
     p.add_argument("--fetch-timeout-ms", type=positive, default=10000)
     p.add_argument("--poll-interval-ms", type=nonnegative, default=1)
     p.add_argument("--metrics-interval-ms", type=positive, default=1000)
+    p.add_argument("--prefetch", choices=("on", "off"), default="off",
+                   help="overlap GST page processing with one next Fetch (default: off)")
     p.add_argument("--repetitions", type=positive, default=1)
     p.add_argument("--start-barrier-delay", type=nonnegative, default=2)
     p.add_argument("--producer-timeout", type=seconds)
@@ -123,6 +125,8 @@ def parse_args():
         p.error("invalid API98 batch/byte limit or replication factor")
     if "single" in a.topic_modes and a.max_bytes < 1000:
         p.error("single mode needs max-bytes >= 1000")
+    if a.prefetch == "on" and "gst" not in a.topic_modes:
+        p.error("prefetch requires GST mode")
     if not a.broker or not re.fullmatch(r"[A-Za-z0-9._-]{1,120}", a.topic_prefix) or a.topic_prefix in (".", ".."):
         p.error("invalid broker or topic prefix")
     if any(value <= 0 for value in (a.command_timeout, a.catchup_timeout, a.topic_delete_timeout)):
@@ -203,6 +207,8 @@ class Experiment:
                     "--output-dir", str(directory / "consumer"), "--ready-file", str(directory / "consumer_ready.json")]
         if a.no_latency_log:
             consumer.append("--no-latency-log")
+        if topic_mode == "gst" and a.prefetch == "on":
+            consumer.extend(("--prefetch", "on"))
         return producer, consumer
 
     def cleanup(self, directory, topic, topic_mode):
