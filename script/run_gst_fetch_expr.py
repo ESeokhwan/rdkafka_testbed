@@ -99,6 +99,10 @@ def parse_args():
                    help="overlap GST page processing with one next Fetch (default: off)")
     p.add_argument("--repetitions", type=positive, default=1)
     p.add_argument("--start-barrier-delay", type=nonnegative, default=2)
+    p.add_argument("--prepare-producers", choices=("on", "off"), default="off",
+                   help="prepare each measurement producer's connections before production (default: off)")
+    p.add_argument("--prepare-timeout-ms", type=positive, default=30000,
+                   help="overall producer preparation timeout in milliseconds")
     p.add_argument("--producer-timeout", type=seconds)
     p.add_argument("--catchup-timeout", type=seconds, default=60, help="wait after producer exit for the finite target")
     p.add_argument("--command-timeout", type=seconds, default=30)
@@ -119,6 +123,8 @@ def parse_args():
     a = p.parse_args()
     if not 0 < a.interval < 1e9:
         p.error("interval must be positive and < 1e9 ms")
+    if a.prepare_timeout_ms > 3600000:
+        p.error("prepare-timeout-ms must be in 1..3600000")
     if max(a.clients) > 2147483647 // a.messages_per_client:
         p.error("total producer attempt count exceeds the existing app limit")
     if a.max_batches > 1000 or a.max_bytes > 16646144 or a.replication_factor > 32767:
@@ -190,6 +196,10 @@ class Experiment:
         if code:
             raise RunError("{} exited {}".format(label, code))
 
+    def producer_process_timeout(self):
+        a = self.args
+        return a.producer_timeout + (a.prepare_timeout_ms / 1000 if a.prepare_producers == "on" else 0)
+
     def commands(self, directory, topic, size, clients, topic_mode):
         a = self.args
         producer_partitions = min(clients, self.partitions_for(topic_mode))
@@ -198,12 +208,14 @@ class Experiment:
                     "--interval", str(a.interval), "--interval-noise-stddev", "0",
                     "--msg-cnt", str(clients * a.messages_per_client), "--msg-size", str(a.message_size),
                     "--start-barrier-delay", str(a.start_barrier_delay), "--ignore-response", "--sample-log"]
+        if a.prepare_producers == "on":
+            producer.extend(("--prepare-producers", "on", "--prepare-timeout-ms", str(a.prepare_timeout_ms)))
         consumer = [str(a.consumer), "--broker", a.broker, "--topic", topic, "--topic-mode", topic_mode, "--start-offset", "0",
                     "--end-offset", str(clients * a.messages_per_client), "--batch-size", str(size),
                     "--max-batches", str(a.max_batches), "--max-bytes", str(a.max_bytes),
                     "--isolation-level", str(a.isolation_level), "--fetch-timeout-ms", str(a.fetch_timeout_ms),
                     "--poll-interval-ms", str(a.poll_interval_ms), "--metrics-interval-ms", str(a.metrics_interval_ms),
-                    "--duration", str(a.command_timeout + a.producer_timeout + a.catchup_timeout + 10),
+                    "--duration", str(a.command_timeout + self.producer_process_timeout() + a.catchup_timeout + 10),
                     "--output-dir", str(directory / "consumer"), "--ready-file", str(directory / "consumer_ready.json")]
         if a.no_latency_log:
             consumer.append("--no-latency-log")
@@ -311,7 +323,7 @@ class Experiment:
             producer_log = (directory / "producer.log").open("w")
             streams.append(producer_log)
             self.producer = subprocess.Popen(producer, stdout=producer_log, stderr=subprocess.STDOUT, start_new_session=True)
-            deadline = time.monotonic() + a.producer_timeout
+            deadline = time.monotonic() + self.producer_process_timeout()
             while self.producer.poll() is None:
                 if self.consumer is not None and self.consumer.poll() not in (None, 0):
                     raise RunError("consumer failed while producer was active")
@@ -319,7 +331,7 @@ class Experiment:
                     raise RunError("producer timed out")
                 time.sleep(.05)
             if self.producer.returncode:
-                raise RunError("producer exited {}".format(self.producer.returncode))
+                raise RunError("producer exited {}; see producer.log".format(self.producer.returncode))
             if a.mode == "backlog":
                 start_consumer()
             try:

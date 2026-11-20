@@ -125,6 +125,8 @@ public:
 
     void close() override;
 
+    rd_kafka_s *client_handle() const { return producer->c_ptr(); }
+
     static std::unique_ptr<RdKafka::Conf> create_producer_conf(
         std::string brokers,
         std::string client_id,
