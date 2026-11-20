@@ -1,17 +1,22 @@
 #include <librdkafka/rdkafka.h>
+#include <libmoniq/adaptor/latency_monitoring_message_adaptor.h>
 
 #include <algorithm>
 #include <chrono>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <thread>
 #include <vector>
 
 namespace {
 using Clock = std::chrono::steady_clock;
-constexpr std::string_view payload = "gst-fetch-warmup";
+std::string warmup_id(const char *topic, int32_t partition, int64_t offset) {
+    return std::string("gst-fetch-warmup-") + topic + "-" +
+        std::to_string(partition) + "-" + std::to_string(offset);
+}
 
 struct Delivery {
     int count = 0;
@@ -80,8 +85,10 @@ int64_t wait_for_index(rd_kafka_t *kafka, const char *topic, int64_t end,
             if (!info->error && info->committed_global_end_offset == end) {
                 size_t count = 0;
                 const auto *record = rd_kafka_global_sequence_page_records(page.get(), &count);
+                moniq::adaptor::FastExtractOnlyJsonBasedLatencyMonitoringMessageAdaptor adaptor;
                 if (count != 1 || record->global_offset != end - 1 || !record->payload ||
-                    std::string_view(static_cast<const char *>(record->payload), record->len) != payload)
+                    adaptor.extract_content(std::string(static_cast<const char *>(record->payload), record->len))
+                        != warmup_id(topic, record->physical_partition, record->physical_offset))
                     throw std::runtime_error("GST warmup boundary did not contain the final warmup record");
                 return end;
             }
@@ -119,12 +126,24 @@ int main(int argc, char **argv) try {
         rd_kafka_new(RD_KAFKA_PRODUCER, conf.get(), reason, sizeof(reason)), rd_kafka_destroy);
     if (!kafka) throw std::runtime_error(reason);
     conf.release();
+    moniq::adaptor::FastJsonBasedLatencyMonitoringMessageGenerator generator(16, 16);
     for (int partition = 0; partition < partitions; ++partition) {
         for (int i = 0; i < records; ++i) {
-            remaining(deadline);
-            check(rd_kafka_producev(kafka.get(), RD_KAFKA_V_TOPIC(argv[2]),
-                RD_KAFKA_V_PARTITION(partition), RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                RD_KAFKA_V_VALUE(const_cast<char *>(payload.data()), payload.size()), RD_KAFKA_V_END));
+            auto message = generator.generate(warmup_id(argv[2], partition, i));
+            while (true) {
+                remaining(deadline);
+                const auto error = rd_kafka_producev(kafka.get(), RD_KAFKA_V_TOPIC(argv[2]),
+                    RD_KAFKA_V_PARTITION(partition), RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                    RD_KAFKA_V_VALUE(message.data(), message.size()), RD_KAFKA_V_END);
+                if (error != RD_KAFKA_RESP_ERR__QUEUE_FULL) {
+                    check(error);
+                    break;
+                }
+                // QUEUE_FULL leaves the record with the caller. Poll to free
+                // queue space before retrying the same record.
+                rd_kafka_poll(kafka.get(), std::min(50, remaining(deadline)));
+                check(state.error);
+            }
         }
     }
     check(rd_kafka_flush(kafka.get(), remaining(deadline)));
