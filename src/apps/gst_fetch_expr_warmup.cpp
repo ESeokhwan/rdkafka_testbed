@@ -62,11 +62,15 @@ bool index_pending(rd_kafka_resp_err_t code) {
 int64_t wait_for_index(rd_kafka_t *kafka, const char *topic, int64_t end,
                        Clock::time_point deadline) {
     std::unique_ptr<rd_kafka_Uuid_t, decltype(&rd_kafka_Uuid_destroy)> uuid(nullptr, rd_kafka_Uuid_destroy);
+    bool verify_last_record = false;
     while (true) {
         rd_kafka_global_sequence_page_t *raw = nullptr;
+        // Probe the committed end without addressing an uncommitted offset.
+        const int64_t first = verify_last_record ? end - 1 : 0;
+        const int64_t limit = verify_last_record ? end : 0;
         const int timeout = remaining(deadline);
         std::unique_ptr<rd_kafka_error_t, decltype(&rd_kafka_error_destroy)> error(
-            rd_kafka_global_sequence_fetch(kafka, topic, uuid.get(), end - 1, end, nullptr, &raw, timeout),
+            rd_kafka_global_sequence_fetch(kafka, topic, uuid.get(), first, limit, nullptr, &raw, timeout),
             rd_kafka_error_destroy);
         std::unique_ptr<rd_kafka_global_sequence_page_t, decltype(&rd_kafka_global_sequence_page_destroy)>
             page(raw, rd_kafka_global_sequence_page_destroy);
@@ -77,7 +81,13 @@ int64_t wait_for_index(rd_kafka_t *kafka, const char *topic, int64_t end,
             if (!uuid) uuid.reset(rd_kafka_Uuid_copy(info->topic_id));
             if (info->committed_global_end_offset > end)
                 throw std::runtime_error("GST warmup end exceeded expected offset");
+            if (!info->error && verify_last_record && info->committed_global_end_offset < end)
+                throw std::runtime_error("GST committed end regressed during warmup verification");
             if (!info->error && info->committed_global_end_offset == end) {
+                if (!verify_last_record) {
+                    verify_last_record = true;
+                    continue;
+                }
                 size_t count = 0;
                 const auto *record = rd_kafka_global_sequence_page_records(page.get(), &count);
                 moniq::adaptor::FastExtractOnlyJsonBasedLatencyMonitoringMessageAdaptor adaptor;
