@@ -127,9 +127,8 @@ Producer create_producer(const char *broker, const std::string &client_id, Deliv
 }
 
 void warm_partition(rd_kafka_t *producer, const char *topic, int partition, int records,
-                    int message_size, Delivery &delivery, Clock::time_point deadline) {
+                    int message_size, std::chrono::milliseconds interval, Delivery &delivery, Clock::time_point deadline) {
     moniq::adaptor::FastJsonBasedLatencyMonitoringMessageGenerator generator(message_size, std::min(message_size, 1000));
-    constexpr auto interval = std::chrono::milliseconds(1);
     for (int i = 0; i < records; ++i) {
         auto message = generator.generate(warmup_id(topic, partition, i));
         while (true) {
@@ -164,12 +163,14 @@ void warm_partition(rd_kafka_t *producer, const char *topic, int partition, int 
 }
 
 int main(int argc, char **argv) try {
-    if (argc != 7 && argc != 8) throw std::runtime_error("usage: gst_fetch_expr_warmup BROKER TOPIC gst|single PARTITIONS RECORDS_PER_PARTITION TIMEOUT_MS [MESSAGE_SIZE]");
+    if (argc < 7 || argc > 9) throw std::runtime_error("usage: gst_fetch_expr_warmup BROKER TOPIC gst|single PARTITIONS RECORDS_PER_PARTITION TIMEOUT_MS [MESSAGE_SIZE [INTERVAL_MS]]");
     const std::string_view mode(argv[3]);
     const int partitions = std::stoi(argv[4]);
     const int records = std::stoi(argv[5]);
     const int timeout = std::stoi(argv[6]);
-    const int message_size = argc == 8 ? std::stoi(argv[7]) : 16;
+    const int message_size = argc >= 8 ? std::stoi(argv[7]) : 16;
+    const auto interval = std::chrono::milliseconds(argc == 9 ? std::stoi(argv[8]) : 1);
+    if (interval.count() <= 0) throw std::runtime_error("warmup interval must be positive");
     if (message_size <= 0 || partitions <= 0 || records <= 0 || timeout <= 0 ||
         (mode != "gst" && (mode != "single" || partitions != 1)))
         throw std::runtime_error("invalid warmup mode, partition count, record count or timeout");
@@ -184,7 +185,7 @@ int main(int argc, char **argv) try {
     for (int p = 0; p < partitions; ++p) {
         workers.push_back(std::async(std::launch::async, [&, p] {
             try {
-                warm_partition(producers[p].get(), argv[2], p, records, message_size, deliveries[p], deadline);
+                warm_partition(producers[p].get(), argv[2], p, records, message_size, interval, deliveries[p], deadline);
             } catch (const std::exception &error) {
                 throw std::runtime_error("partition " + std::to_string(p) + ": " + error.what());
             }

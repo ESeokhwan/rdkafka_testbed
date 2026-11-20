@@ -100,6 +100,8 @@ def parse_args():
     p.add_argument("--repetitions", type=positive, default=1)
     p.add_argument("--warmup-records-per-partition", type=nonnegative, default=0,
                    help="warmup records per active source partition")
+    p.add_argument("--warmup-interval-ms", type=positive, default=1,
+                   help="interval between warmup records on each active partition in ms (default: 1)")
     p.add_argument("--warmup-timeout", type=positive, default=30, help="warmup deadline in seconds")
     p.add_argument("--start-barrier-delay", type=nonnegative, default=2)
     p.add_argument("--prepare-producers", choices=("on", "off"), default="off",
@@ -126,6 +128,8 @@ def parse_args():
     a = p.parse_args()
     if not 0 < a.interval < 1e9:
         p.error("interval must be positive and < 1e9 ms")
+    if a.warmup_interval_ms > 2147483647:
+        p.error("warmup interval exceeds the supported millisecond range")
     if a.warmup_timeout > 2147483 or a.warmup_records_per_partition > 2147483647:
         p.error("warmup timeout or record count exceeds the supported range")
     if a.prepare_timeout_ms > 3600000:
@@ -209,7 +213,8 @@ class Experiment:
         a = self.args
         partitions = min(clients, self.partitions_for(topic_mode))
         return [str(ROOT / "bin/gst_fetch_expr_warmup"), a.broker, topic, topic_mode,
-                str(partitions), str(a.warmup_records_per_partition), str(a.warmup_timeout * 1000), str(a.message_size)]
+                str(partitions), str(a.warmup_records_per_partition), str(a.warmup_timeout * 1000),
+                str(a.message_size), str(a.warmup_interval_ms)]
 
     def commands(self, directory, topic, size, clients, topic_mode, start_offset=0):
         a = self.args
