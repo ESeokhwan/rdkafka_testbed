@@ -186,9 +186,14 @@ void ProducerService::work() {
     if (need_flush || is_sync) flush_producer(producer);
 }
 
+ProducerService::~ProducerService() {
+    if (retain_after_close) delete producer;
+}
+
 void ProducerService::close() {
     if (producer != nullptr && need_to_cleanup_producer) {
         flush_producer(producer);
+        if (retain_after_close) return;
         delete producer;
         producer = nullptr;
     }

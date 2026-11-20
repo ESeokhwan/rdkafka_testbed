@@ -6,6 +6,9 @@
 #include "producer/producer_service.h"
 
 #include <chrono>
+#include <condition_variable>
+#include <fstream>
+#include <mutex>
 #include <csignal>
 #include <iostream>
 #include <memory>
@@ -54,6 +57,7 @@ struct Arguments {
     int start_barrier_delay;
     int monitoring_batch_size;
     bool prepare_producers = false;
+    string produce_sent_csv;
     int prepare_timeout_ms = 30000;
 
     bool scrapable;
@@ -95,7 +99,7 @@ private:
     void init_standalone_services(vector<ClientAssignment> client_assignments);
     void init_sharing_prod_services(vector<ClientAssignment> client_assignments);
     void prepare_measurement_producers();
-    void join_clients();
+    void join_clients(bool retain_shared = false);
 
 public:
     BasicProducersTest(
@@ -122,6 +126,9 @@ namespace {
     constexpr util::OptionWrapper PREPARE_PRODUCERS_OPTION{
         "prepare-producers", required_argument, nullptr, util::CUSTOM_LONG_OPTIONS_VALUE_OFFSET,
         "Prepare the measurement producer connections before starting (on|off, default off)"};
+    constexpr util::OptionWrapper PRODUCE_SENT_CSV_OPTION{
+        "produce-sent-csv", required_argument, nullptr, util::CUSTOM_LONG_OPTIONS_VALUE_OFFSET + 2,
+        "Write one-second samples of fully sent Produce requests to this CSV"};
     constexpr util::OptionWrapper PREPARE_TIMEOUT_OPTION{
         "prepare-timeout-ms", required_argument, nullptr, util::CUSTOM_LONG_OPTIONS_VALUE_OFFSET + 1,
         "Overall producer preparation timeout in milliseconds (30000)"};
@@ -193,13 +200,51 @@ int main(int argc, char *argv[]) {
 }
 
 void BasicProducersTest::run() {
+    if (!args.produce_sent_csv.empty() && args.share_producer && args.warmup_cnt > 0) {
+        throw runtime_error("produce-sent-csv requires separate handles for warmup and measurement");
+    }
+    ofstream sent_csv;
+    if (!args.produce_sent_csv.empty()) {
+        sent_csv.exceptions(ios::failbit | ios::badbit);
+        sent_csv.open(args.produce_sent_csv);
+    }
     init_services();
     if (interrupted) return;
     if (args.prepare_producers) prepare_measurement_producers();
 
     services_initialized = 1;
     if (interrupted) return;
+    struct Sample {
+        int64_t started_ms, finished_ms;
+        uint64_t total;
+    };
+    vector<Sample> samples;
+    const auto epoch_ms = [] {
+        return chrono::duration_cast<chrono::milliseconds>(
+            chrono::system_clock::now().time_since_epoch()).count();
+    };
+    const auto sample = [&] {
+        Sample row{epoch_ms(), 0, 0};
+        for (const auto &target : preparation_targets) {
+            row.total += rd_kafka_produce_requests_sent(target.handle);
+        }
+        row.finished_ms = epoch_ms();
+        return row;
+    };
+    mutex sample_mutex;
+    condition_variable_any sample_ready;
+    jthread sampler;
     try {
+        if (sent_csv.is_open()) {
+            samples.push_back(sample());
+            sampler = jthread([&](stop_token stop) {
+                unique_lock lock(sample_mutex);
+                while (!stop.stop_requested()) {
+                    sample_ready.wait_for(lock, stop, chrono::seconds(1), [] { return false; });
+                    if (!stop.stop_requested()) samples.push_back(sample());
+                }
+            });
+        }
         client_threads.reserve(services_runners.size());
         for (const auto &service_runner : services_runners) {
             client_threads.emplace_back(&ServicesRunner::run, service_runner.get());
@@ -210,7 +255,18 @@ void BasicProducersTest::run() {
         start_signal.count_down();
         throw;
     }
-    join_clients();
+    join_clients(sent_csv.is_open());
+    if (sent_csv.is_open()) {
+        sampler.request_stop();
+        sampler.join();
+        samples.push_back(sample());
+        sent_csv << "sample_started_at_ms,sample_finished_at_ms,produce_requests_sent_total\n";
+        const auto baseline = samples.front().total;
+        for (const auto &row : samples) {
+            sent_csv << row.started_ms << ',' << row.finished_ms << ',' << row.total - baseline << '\n';
+        }
+        sent_csv.close();
+    }
 }
 
 void BasicProducersTest::init_services() {
@@ -298,7 +354,7 @@ void BasicProducersTest::init_sharing_prod_services(vector<ClientAssignment> cli
             throw std::runtime_error(errstr);
         }
         shared_producers.push_back(producer);
-        if (args.prepare_producers) {
+        if (args.prepare_producers || !args.produce_sent_csv.empty()) {
             PreparationTarget target{producer->c_ptr(), i, {}};
             for (const auto &assignment : client_assignments[i].partition_assignments) {
                 target.partitions.push_back(assignment.partition);
@@ -391,7 +447,8 @@ void BasicProducersTest::init_standalone_services(vector<ClientAssignment> clien
                 monitor_queue,
                 writer
             );
-            if (args.prepare_producers) {
+            if (!args.produce_sent_csv.empty()) service->retain_client_after_close();
+            if (args.prepare_producers || !args.produce_sent_csv.empty()) {
                 preparation_targets.push_back({service->client_handle(), i, {pa.partition}});
             }
             services.push_back(service);
@@ -428,15 +485,15 @@ void BasicProducersTest::close_service_runners() {
     }
 }
 
-void BasicProducersTest::join_clients() {
+void BasicProducersTest::join_clients(bool retain_shared) {
     for (auto &client_thread: client_threads) {
         if (client_thread.joinable()) client_thread.join();
     }
     for (auto *producer: shared_producers) {
         producer->flush(5000);
-        delete producer;
+        if (!retain_shared) delete producer;
     }
-    shared_producers.clear();
+    if (!retain_shared) shared_producers.clear();
 }
 
 void BasicProducersTest::cleanup_main() {
@@ -536,6 +593,7 @@ Arguments parse_arguments(int argc, char** argv) {
         util::START_BARRIER_DELAY_OPTION,
         PREPARE_PRODUCERS_OPTION,
         PREPARE_TIMEOUT_OPTION,
+        PRODUCE_SENT_CSV_OPTION,
         util::MONITORING_BATCH_SIZE_OPTION,
         util::SCRAPABLE_OPTION,
         util::VERBOSE_OPTION,
@@ -570,6 +628,10 @@ Arguments parse_arguments(int argc, char** argv) {
                 args.prepare_producers = mode == "on";
                 break;
             }
+            case PRODUCE_SENT_CSV_OPTION.get_val():
+                args.produce_sent_csv = optarg;
+                if (args.produce_sent_csv.empty()) throw runtime_error("produce-sent-csv requires a path");
+                break;
             case PREPARE_TIMEOUT_OPTION.get_val(): {
                 size_t used = 0;
                 const string value = optarg;

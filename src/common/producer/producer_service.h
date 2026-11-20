@@ -28,6 +28,7 @@ private:
 
     RdKafka::Producer *producer;
     const bool need_to_cleanup_producer;
+    bool retain_after_close = false;
     RdKafka::DeliveryReportCb* dr_cb; // it will be set null if `producer` is injected from outside.
 
     std::shared_ptr<moniq::adaptor::IMessageAdaptor> adaptor;
@@ -117,7 +118,9 @@ public:
         std::shared_ptr<moniq::writer::MonitorLogWriter> &writer
     );
 
-    virtual ~ProducerService() = default;
+    ~ProducerService() override;
+
+    void retain_client_after_close() { retain_after_close = true; }
 
     bool is_done() override;
 
