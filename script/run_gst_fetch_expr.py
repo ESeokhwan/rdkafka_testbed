@@ -209,7 +209,7 @@ class Experiment:
         a = self.args
         partitions = min(clients, self.partitions_for(topic_mode))
         return [str(ROOT / "bin/gst_fetch_expr_warmup"), a.broker, topic, topic_mode,
-                str(partitions), str(a.warmup_records_per_partition), str(a.warmup_timeout * 1000)]
+                str(partitions), str(a.warmup_records_per_partition), str(a.warmup_timeout * 1000), str(a.message_size)]
 
     def commands(self, directory, topic, size, clients, topic_mode, start_offset=0):
         a = self.args
