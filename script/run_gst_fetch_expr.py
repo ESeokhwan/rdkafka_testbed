@@ -98,6 +98,9 @@ def parse_args():
     p.add_argument("--prefetch", choices=("on", "off"), default="off",
                    help="overlap GST page processing with one next Fetch (default: off)")
     p.add_argument("--repetitions", type=positive, default=1)
+    p.add_argument("--warmup-records-per-partition", type=nonnegative, default=0,
+                   help="acknowledged warmup records per active source partition")
+    p.add_argument("--warmup-timeout", type=positive, default=30, help="warmup deadline in seconds")
     p.add_argument("--start-barrier-delay", type=nonnegative, default=2)
     p.add_argument("--prepare-producers", choices=("on", "off"), default="off",
                    help="prepare each measurement producer's connections before production (default: off)")
@@ -123,6 +126,8 @@ def parse_args():
     a = p.parse_args()
     if not 0 < a.interval < 1e9:
         p.error("interval must be positive and < 1e9 ms")
+    if a.warmup_timeout > 2147483 or a.warmup_records_per_partition > 2147483647:
+        p.error("warmup timeout or record count exceeds the supported range")
     if a.prepare_timeout_ms > 3600000:
         p.error("prepare-timeout-ms must be in 1..3600000")
     if max(a.clients) > 2147483647 // a.messages_per_client:
@@ -200,7 +205,13 @@ class Experiment:
         a = self.args
         return a.producer_timeout + (a.prepare_timeout_ms / 1000 if a.prepare_producers == "on" else 0)
 
-    def commands(self, directory, topic, size, clients, topic_mode):
+    def warmup_command(self, topic, clients, topic_mode):
+        a = self.args
+        partitions = min(clients, self.partitions_for(topic_mode))
+        return [str(ROOT / "bin/gst_fetch_expr_warmup"), a.broker, topic, topic_mode,
+                str(partitions), str(a.warmup_records_per_partition), str(a.warmup_timeout * 1000)]
+
+    def commands(self, directory, topic, size, clients, topic_mode, start_offset=0):
         a = self.args
         producer_partitions = min(clients, self.partitions_for(topic_mode))
         producer = [str(a.producer), "--broker", a.broker, "--topic-name", topic, "--prefix", topic,
@@ -210,8 +221,8 @@ class Experiment:
                     "--start-barrier-delay", str(a.start_barrier_delay), "--ignore-response", "--sample-log"]
         if a.prepare_producers == "on":
             producer.extend(("--prepare-producers", "on", "--prepare-timeout-ms", str(a.prepare_timeout_ms)))
-        consumer = [str(a.consumer), "--broker", a.broker, "--topic", topic, "--topic-mode", topic_mode, "--start-offset", "0",
-                    "--end-offset", str(clients * a.messages_per_client), "--batch-size", str(size),
+        consumer = [str(a.consumer), "--broker", a.broker, "--topic", topic, "--topic-mode", topic_mode, "--start-offset", str(start_offset),
+                    "--end-offset", str(start_offset + clients * a.messages_per_client), "--batch-size", str(size),
                     "--max-batches", str(a.max_batches), "--max-bytes", str(a.max_bytes),
                     "--isolation-level", str(a.isolation_level), "--fetch-timeout-ms", str(a.fetch_timeout_ms),
                     "--poll-interval-ms", str(a.poll_interval_ms), "--metrics-interval-ms", str(a.metrics_interval_ms),
@@ -303,7 +314,19 @@ class Experiment:
             self.command(create, directory, "create")
             self.pending_topics[topic] = (directory, result)
             result["cleanup_status"] = "PENDING"
-            producer, consumer = self.commands(directory, topic, size, clients, topic_mode)
+            start_offset = 0
+            if a.warmup_records_per_partition:
+                self.command(self.warmup_command(topic, clients, topic_mode), directory, "warmup", a.warmup_timeout + 5)
+                lines = (directory / "warmup.log").read_text().splitlines()
+                if not lines or not lines[-1].isdigit():
+                    raise RunError("missing warmup boundary; see warmup.log")
+                start_offset = int(lines[-1])
+                expected = min(clients, partitions) * a.warmup_records_per_partition
+                if start_offset != expected:
+                    raise RunError("unexpected warmup boundary; see warmup.log")
+                result["warmup_records"] = start_offset
+                result["measurement_start_offset"] = start_offset
+            producer, consumer = self.commands(directory, topic, size, clients, topic_mode, start_offset)
             (directory / "producer_command.json").write_text(json.dumps(producer, indent=2) + "\n")
             (directory / "consumer_command.json").write_text(json.dumps(consumer, indent=2) + "\n")
             def start_consumer():
@@ -424,9 +447,14 @@ class Experiment:
                     partitions = self.partitions_for(topic_mode)
                     for size in a.batch_sizes:
                         topic = "{}_{}_p{}_clients_{}_batch_{}_repeat_1_dry".format(a.topic_prefix, topic_mode, partitions, clients, size)
-                        producer, consumer = self.commands(a.output_root / "dry-run", topic, size, clients, topic_mode)
+                        planned_start = min(clients, partitions) * a.warmup_records_per_partition
+                        producer, consumer = self.commands(a.output_root / "dry-run", topic, size, clients, topic_mode, planned_start)
                         stages = "consumer ready -> producer -> catch up" if a.mode == "live" else "producer -> consumer drain"
+                        if planned_start:
+                            stages = "warmup -> confirm committed start -> " + stages
                         print("topic_mode={} P={} batch_size={} repetitions={}: create fresh topic -> {}".format(topic_mode, partitions, size, a.repetitions, stages))
+                        if planned_start:
+                            print("WARMUP: " + " ".join(shlex.quote(arg) for arg in self.warmup_command(topic, clients, topic_mode)))
                         print("CONSUMER: " + " ".join(shlex.quote(arg) for arg in consumer))
                         print("PRODUCER: " + " ".join(shlex.quote(arg) for arg in producer))
                         if a.cleanup_after == "run":
@@ -434,7 +462,10 @@ class Experiment:
                 if a.cleanup_after == "clients":
                     print("delete all topics for clients={} -> cooldown {}s -> next client count".format(clients, a.cooldown))
             return 0
-        for path in (a.producer, a.consumer, a.cleanup_runner, a.kafka_bin / "kafka-topics.sh"):
+        paths = [a.producer, a.consumer, a.cleanup_runner, a.kafka_bin / "kafka-topics.sh"]
+        if a.warmup_records_per_partition:
+            paths.append(ROOT / "bin/gst_fetch_expr_warmup")
+        for path in paths:
             if not path.is_file() or not os.access(str(path), os.X_OK):
                 raise RunError("executable missing; build the local GST-enabled targets: " + str(path))
         a.output_root.mkdir(parents=True, exist_ok=True)
