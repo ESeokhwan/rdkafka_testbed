@@ -99,7 +99,7 @@ def parse_args():
                    help="overlap GST page processing with one next Fetch (default: off)")
     p.add_argument("--repetitions", type=positive, default=1)
     p.add_argument("--warmup-records-per-partition", type=nonnegative, default=0,
-                   help="acknowledged warmup records per active source partition")
+                   help="warmup records per active source partition")
     p.add_argument("--warmup-timeout", type=positive, default=30, help="warmup deadline in seconds")
     p.add_argument("--start-barrier-delay", type=nonnegative, default=2)
     p.add_argument("--prepare-producers", choices=("on", "off"), default="off",

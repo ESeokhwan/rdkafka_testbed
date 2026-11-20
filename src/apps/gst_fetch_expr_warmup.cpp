@@ -20,7 +20,6 @@ std::string warmup_id(const char *topic, int32_t partition, int64_t offset) {
 
 struct Delivery {
     int count = 0;
-    int64_t last_offset = -1;
 };
 
 struct Deliveries {
@@ -36,7 +35,6 @@ void delivered(rd_kafka_t *, const rd_kafka_message_t *message, void *opaque) {
     }
     auto &partition = state.partitions.at(message->partition);
     ++partition.count;
-    partition.last_offset = std::max(partition.last_offset, message->offset);
 }
 
 int remaining(Clock::time_point deadline) {
@@ -118,8 +116,8 @@ int main(int argc, char **argv) try {
     };
     set("bootstrap.servers", argv[1]);
     set("allow.auto.create.topics", "false");
-    set("enable.idempotence", "true");
-    set("acks", "all");
+    set("enable.idempotence", "false");
+    set("acks", "0");
     rd_kafka_conf_set_opaque(conf.get(), &state);
     rd_kafka_conf_set_dr_msg_cb(conf.get(), delivered);
     std::unique_ptr<rd_kafka_t, decltype(&rd_kafka_destroy)> kafka(
@@ -127,8 +125,9 @@ int main(int argc, char **argv) try {
     if (!kafka) throw std::runtime_error(reason);
     conf.release();
     moniq::adaptor::FastJsonBasedLatencyMonitoringMessageGenerator generator(16, 16);
-    for (int partition = 0; partition < partitions; ++partition) {
-        for (int i = 0; i < records; ++i) {
+    constexpr auto round_interval = std::chrono::milliseconds(1);
+    for (int i = 0; i < records; ++i) {
+        for (int partition = 0; partition < partitions; ++partition) {
             auto message = generator.generate(warmup_id(argv[2], partition, i));
             while (true) {
                 remaining(deadline);
@@ -145,19 +144,32 @@ int main(int argc, char **argv) try {
                 check(state.error);
             }
         }
+        rd_kafka_poll(kafka.get(), 0);
+        check(state.error);
+        if (i + 1 < records) {
+            std::this_thread::sleep_until(std::min(deadline, Clock::now() + round_interval));
+        }
     }
     check(rd_kafka_flush(kafka.get(), remaining(deadline)));
     check(state.error);
     for (int partition = 0; partition < partitions; ++partition) {
         const auto &delivery = state.partitions[partition];
-        int64_t low = -1, high = -1;
-        check(rd_kafka_query_watermark_offsets(kafka.get(), argv[2], partition, &low, &high, remaining(deadline)));
-        if (delivery.count != records || delivery.last_offset != records - 1 || low != 0 || high != records)
-            throw std::runtime_error("unexpected warmup offsets for partition " + std::to_string(partition));
+        if (delivery.count != records)
+            throw std::runtime_error("incomplete warmup send for partition " + std::to_string(partition));
+        // acks=0 completes locally before the broker necessarily exposes the records.
+        while (true) {
+            int64_t low = -1, high = -1;
+            const int timeout = remaining(deadline);
+            check(rd_kafka_query_watermark_offsets(kafka.get(), argv[2], partition, &low, &high, timeout));
+            if (low != 0 || high > records)
+                throw std::runtime_error("unexpected warmup offsets for partition " + std::to_string(partition));
+            if (high == records) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(std::min(20, remaining(deadline))));
+        }
     }
     const int64_t start = mode == "gst"
         ? wait_for_index(kafka.get(), argv[2], static_cast<int64_t>(partitions) * records, deadline)
-        : state.partitions[0].last_offset + 1;
+        : records;
     kafka.reset();
     std::cout << start << '\n';
     return 0;
