@@ -6,6 +6,7 @@ import csv
 from datetime import datetime, timezone
 from pathlib import Path
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -31,6 +32,15 @@ def cleanup_completed(group_dir, expected_topics):
     with reports[0].open(newline="") as report:
         rows = list(csv.DictReader(report, delimiter="\t"))
     return len(rows) == expected_topics and all(row.get("status") == "DELETED" for row in rows)
+
+
+def append_group_summary(source, destination):
+    # Copy the runner's TSV verbatim, including empty fields and the original log paths.
+    with source.open("rb") as group, destination.open("ab") as sweep:
+        header = group.readline()
+        if sweep.tell() == 0:
+            sweep.write(header)
+        shutil.copyfileobj(group, sweep)
 
 
 def main():
@@ -66,6 +76,8 @@ def main():
         prefix = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ.")
         sweep_dir = Path(tempfile.mkdtemp(prefix=prefix, dir=args.output_root))
         print(f"Results: {sweep_dir}", flush=True)
+        sweep_summary = sweep_dir / "summary.tsv"
+        print(f"Sweep summary: {sweep_summary}", flush=True)
 
     status = 0
     for clients in args.clients:
@@ -85,6 +97,14 @@ def main():
             stop(interrupted, None)
         code = active.wait()
         active = None
+        if not args.dry_run:
+            # An interrupted runner may already have recorded several completed cases.
+            group_summary = next(group_dir.glob("*/summary.tsv"), None)
+            if group_summary is not None:
+                append_group_summary(group_summary, sweep_summary)
+            elif code == 0 and not interrupted:
+                print(f"Missing summary for clients={clients}. See {group_dir}", file=sys.stderr)
+                return 1
         if interrupted:
             break
         if code not in (0, 1) or (args.dry_run and code):
