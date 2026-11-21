@@ -9,6 +9,7 @@ import math
 import os
 from pathlib import Path
 import re
+import resource
 import shlex
 import signal
 import socket
@@ -32,6 +33,36 @@ class Cancelled(BaseException):
 
 def now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="milliseconds")
+
+
+def configure_fd_limit(clients, bootstrap_servers):
+    # Each producer has an internal broker (one wake-up pipe) and each
+    # bootstrap broker needs another pipe and a connection socket.
+    brokers = len(set(address.strip() for address in bootstrap_servers.split(",") if address.strip()))
+    minimum = 3 + (clients + 1) * (2 + 3 * max(1, brokers))
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    unlimited = resource.RLIM_INFINITY
+    if hard != unlimited and hard < minimum:
+        raise RunError(f"hard open-file limit {hard} is too low for {clients} producer clients "
+                       f"(estimated minimum {minimum}); raise the hard nofile limit before running")
+    target = max(65536, minimum)
+    if hard != unlimited:
+        target = min(target, hard)
+    if soft != unlimited and soft < target:
+        try:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+        except (ValueError, OSError) as error:
+            # Some systems impose a separate per-process ceiling even with an
+            # unlimited hard rlimit. Try the workload estimate in that case.
+            if soft < minimum:
+                try:
+                    resource.setrlimit(resource.RLIMIT_NOFILE, (minimum, hard))
+                except (ValueError, OSError) as fallback_error:
+                    raise RunError(f"could not raise soft open-file limit from {soft} to {minimum}: "
+                                   f"{fallback_error}") from fallback_error
+            print(f"Could not apply preferred open-file limit {target}: {error}", file=sys.stderr)
+    effective, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+    return dict(soft_before=soft, soft=effective, hard=hard, estimated_minimum=minimum)
 
 
 def positive(value):
@@ -368,6 +399,9 @@ class Experiment:
                 raise RunError("consumer did not reach the target within catchup-timeout")
             if self.consumer.returncode:
                 raise RunError("consumer exited {}; inspect its summary.json".format(self.consumer.returncode))
+            with (directory / "producer.log").open("rb") as log:
+                if any(b"Too many open files" in line for line in log):
+                    raise RunError("producer exhausted file descriptors; see producer.log")
         except (RunError, OSError, ValueError) as error:
             result.update(status="FAILED", reason=str(error))
         except Cancelled:
@@ -473,10 +507,11 @@ class Experiment:
         for path in paths:
             if not path.is_file() or not os.access(str(path), os.X_OK):
                 raise RunError("executable missing; build the local GST-enabled targets: " + str(path))
+        fd_limit = configure_fd_limit(max(a.clients), a.broker)
         a.output_root.mkdir(parents=True, exist_ok=True)
         self.output = Path(tempfile.mkdtemp(prefix=datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ."), dir=str(a.output_root)))
         config = {key: str(value) if isinstance(value, Path) else value for key, value in vars(a).items()}
-        config.update(generator_host=socket.gethostname(), measurement=a.mode + " " + ",".join(a.topic_modes) + " fetch", producer_acks=0, consumer_count=1,
+        config.update(open_files=fd_limit, generator_host=socket.gethostname(), measurement=a.mode + " " + ",".join(a.topic_modes) + " fetch", producer_acks=0, consumer_count=1,
                       topic_partitions={mode: self.partitions_for(mode) for mode in a.topic_modes},
                       message_generator="FastJsonBasedLatencyMonitoringMessageGenerator", throughput_clock="consumer steady elapsed time")
         (self.output / "config.json").write_text(json.dumps(config, indent=2) + "\n")
