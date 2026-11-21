@@ -127,10 +127,16 @@ Producer create_producer(const char *broker, const std::string &client_id, Deliv
 }
 
 void warm_partition(rd_kafka_t *producer, const char *topic, int partition, int records,
-                    int message_size, std::chrono::milliseconds interval, Delivery &delivery, Clock::time_point deadline) {
+                    int message_size, std::chrono::milliseconds interval, Delivery &delivery, Clock::time_point deadline,
+                    bool append) {
+    int64_t base = 0;
+    if (append) {
+        int64_t low;
+        check(rd_kafka_query_watermark_offsets(producer, topic, partition, &low, &base, remaining(deadline)));
+    }
     moniq::adaptor::FastJsonBasedLatencyMonitoringMessageGenerator generator(message_size, std::min(message_size, 1000));
     for (int i = 0; i < records; ++i) {
-        auto message = generator.generate(warmup_id(topic, partition, i));
+        auto message = generator.generate(warmup_id(topic, partition, base + i));
         while (true) {
             remaining(deadline);
             const auto error = rd_kafka_producev(producer, RD_KAFKA_V_TOPIC(topic),
@@ -155,15 +161,15 @@ void warm_partition(rd_kafka_t *producer, const char *topic, int partition, int 
     while (true) {
         int64_t low = -1, high = -1;
         check(rd_kafka_query_watermark_offsets(producer, topic, partition, &low, &high, remaining(deadline)));
-        if (low != 0 || high > records) throw std::runtime_error("unexpected warmup offsets");
-        if (high == records) return;
+        if ((!append && low != 0) || high > base + records) throw std::runtime_error("unexpected warmup offsets");
+        if (high == base + records) return;
         std::this_thread::sleep_for(std::chrono::milliseconds(std::min(20, remaining(deadline))));
     }
 }
 }
 
 int main(int argc, char **argv) try {
-    if (argc < 7 || argc > 9) throw std::runtime_error("usage: gst_fetch_expr_warmup BROKER TOPIC gst|single PARTITIONS RECORDS_PER_PARTITION TIMEOUT_MS [MESSAGE_SIZE [INTERVAL_MS]]");
+    if (argc < 7 || argc > 9) throw std::runtime_error("usage: gst_fetch_expr_warmup BROKER TOPIC gst|single|produce PARTITIONS RECORDS_PER_PARTITION TIMEOUT_MS [MESSAGE_SIZE [INTERVAL_MS]]");
     const std::string_view mode(argv[3]);
     const int partitions = std::stoi(argv[4]);
     const int records = std::stoi(argv[5]);
@@ -172,7 +178,7 @@ int main(int argc, char **argv) try {
     const auto interval = std::chrono::milliseconds(argc == 9 ? std::stoi(argv[8]) : 1);
     if (interval.count() <= 0) throw std::runtime_error("warmup interval must be positive");
     if (message_size <= 0 || partitions <= 0 || records <= 0 || timeout <= 0 ||
-        (mode != "gst" && (mode != "single" || partitions != 1)))
+        (mode != "produce" && mode != "gst" && (mode != "single" || partitions != 1)))
         throw std::runtime_error("invalid warmup mode, partition count, record count or timeout");
 
     const auto deadline = Clock::now() + std::chrono::milliseconds(timeout);
@@ -185,13 +191,17 @@ int main(int argc, char **argv) try {
     for (int p = 0; p < partitions; ++p) {
         workers.push_back(std::async(std::launch::async, [&, p] {
             try {
-                warm_partition(producers[p].get(), argv[2], p, records, message_size, interval, deliveries[p], deadline);
+                warm_partition(producers[p].get(), argv[2], p, records, message_size, interval, deliveries[p], deadline, mode == "produce");
             } catch (const std::exception &error) {
                 throw std::runtime_error("partition " + std::to_string(p) + ": " + error.what());
             }
         }));
     }
     for (auto &worker : workers) worker.get();
+    if (mode == "produce") {
+        std::cout << "Warmup completed on " << partitions << " partitions, " << records << " records each\n";
+        return 0;
+    }
     const int64_t start = mode == "gst"
         ? wait_for_index(producers.front().get(), argv[2], static_cast<int64_t>(partitions) * records, deadline)
         : records;

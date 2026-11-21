@@ -14,6 +14,10 @@ MESSAGE_SIZE=1000
 REPETITIONS=3
 REPLICATION_FACTOR=1
 START_BARRIER_DELAY=2
+WARMUP_RECORDS=0
+WARMUP_INTERVAL_MS=1
+WARMUP_TIMEOUT=30
+WARMUP_PRODUCER="$PROJECT_ROOT/bin/gst_fetch_expr_warmup"
 DRAIN_WAIT=20
 COOLDOWN=60
 PRODUCER="$PROJECT_ROOT/bin/single_topic_throughput_expr_producer"
@@ -64,6 +68,9 @@ The existing producer app is used unchanged, asynchronously with acks=0.
   --kafka-bin DIR             Default: <project>/../kafka_sandbox/bin
   --output-root DIR           Default: <project>/out/gst_fixed_partition
   --start-barrier-delay SEC   Producer startup barrier delay (2)
+  --warmup-records-per-partition N  Untagged records per active partition before each run (0 disables)
+  --warmup-interval-ms MS     Per-partition warmup interval (1)
+  --warmup-timeout SEC        Overall warmup deadline (30)
   --drain-wait SEC            Wait after producer exit before broker rollout (20)
   --cooldown SEC              Wait after rollout before the next run (60)
   --run-hook PATH             Optional before_produce/after_rollout callback
@@ -118,6 +125,9 @@ while (( $# > 0 )); do
         --kafka-bin) KAFKA_BIN=$2 ;;
         --output-root) OUTPUT_ROOT=$2 ;;
         --start-barrier-delay) START_BARRIER_DELAY=$2 ;;
+        --warmup-records-per-partition) WARMUP_RECORDS=$2 ;;
+        --warmup-interval-ms) WARMUP_INTERVAL_MS=$2 ;;
+        --warmup-timeout) WARMUP_TIMEOUT=$2 ;;
         --drain-wait) DRAIN_WAIT=$2 ;;
         --cooldown) COOLDOWN=$2 ;;
         --run-hook) RUN_HOOK=$2 ;;
@@ -144,6 +154,10 @@ positive_int repetitions "$REPETITIONS"
 positive_int replication-factor "$REPLICATION_FACTOR"
 (( REPLICATION_FACTOR <= 32767 )) || die "replication-factor must be <= 32767"
 nonnegative_int start-barrier-delay "$START_BARRIER_DELAY"
+nonnegative_int warmup-records-per-partition "$WARMUP_RECORDS"
+positive_int warmup-interval-ms "$WARMUP_INTERVAL_MS"
+positive_int warmup-timeout "$WARMUP_TIMEOUT"
+(( WARMUP_TIMEOUT <= 2147483 )) || die "warmup-timeout exceeds supported millisecond range"
 nonnegative_int drain-wait "$DRAIN_WAIT"
 nonnegative_int cooldown "$COOLDOWN"
 [[ "$TOPIC_DELETE_TIMEOUT" =~ ^([0-9]+([.][0-9]*)?|[.][0-9]+)$ ]] && \
@@ -199,6 +213,7 @@ fi
 if (( ! DRY_RUN )); then
     [[ -x "$TOPICS_COMMAND" ]] || die "Topic command not found: $TOPICS_COMMAND"
     if (( ! CLEANUP_ONLY )); then
+        (( ! WARMUP_RECORDS )) || [[ -x "$WARMUP_PRODUCER" ]] || die "Warmup producer not found: $WARMUP_PRODUCER"
         [[ -x "$PRODUCER" ]] || die "Producer executable not found: $PRODUCER"
         [[ -x "$EXTENSION_COMMAND" ]] || die "Broker measurement extension not found: $EXTENSION_COMMAND"
         [[ -z "$RUN_HOOK" || -x "$RUN_HOOK" ]] || die "Run hook not executable: $RUN_HOOK"
@@ -220,6 +235,7 @@ if (( ! DRY_RUN )); then
         printf 'replication_factor\t%s\ncreate_topics\t%s\nstart_barrier_delay\t%s\ndrain_wait\t%s\ncooldown\t%s\n' \
             "$REPLICATION_FACTOR" "$CREATE_TOPICS" "$START_BARRIER_DELAY" "$DRAIN_WAIT" "$COOLDOWN"
         printf 'open_files_soft_limit\t%s\n' "$(ulimit -Sn)"
+        printf 'warmup_records_per_partition\t%s\nwarmup_interval_ms\t%s\nwarmup_timeout_s\t%s\n' "$WARMUP_RECORDS" "$WARMUP_INTERVAL_MS" "$WARMUP_TIMEOUT"
         printf 'run_hook\t%s\n' "$RUN_HOOK"
         printf 'record_prefix\t%s\nsample_log\t%s\n' "$RECORD_PREFIX" "$SAMPLE_LOG"
         printf 'delete_topics_after\t%s\ntopic_delete_timeout\t%s\n' "$DELETE_TOPICS_AFTER" "$TOPIC_DELETE_TIMEOUT"
@@ -456,6 +472,7 @@ run_experiment() {
         gst) topic=$GST_TOPIC ;;
         single) topic=$SINGLE_TOPIC; partitions=1 ;;
     esac
+    local producer_partitions=$(( clients < partitions ? clients : partitions ))
     run_id="repeat_${repetition}_clients_${clients}_${mode}"
     run_dir="${RESULTS_DIR:-dry-run}/$run_id"
     started_at=$(utc_now)
@@ -465,12 +482,15 @@ run_experiment() {
         reason=log_directory_failed
     elif ! prepare_topic "$mode" "$topic" "$partitions" "$run_dir"; then
         reason=$TOPIC_FAILURE
+    elif (( WARMUP_RECORDS )) && ! run_logged "$run_dir/warmup.log" "$WARMUP_PRODUCER" \
+            "$BROKER" "$topic" produce "$producer_partitions" "$WARMUP_RECORDS" \
+            "$((WARMUP_TIMEOUT * 1000))" "$MESSAGE_SIZE" "$WARMUP_INTERVAL_MS"; then
+        reason=warmup_failed
     elif ! execute_rollout "$run_dir/prepare_metrics.log"; then
         reason="metrics_not_ready: $ROLLOUT_FAILURES"
     elif ! run_hook before_produce "$run_dir"; then
         reason=before_produce_hook_failed
     else
-        local producer_partitions=$(( clients < partitions ? clients : partitions ))
         local producer_command=("$PRODUCER" --broker "$BROKER" --prefix "${RECORD_PREFIX:-$topic}" --partition-cnt "$producer_partitions" --client-cnt "$clients" --interval "$INTERVAL_MS" --interval-noise-stddev 0 --msg-cnt "$total_msgs" --msg-size "$MESSAGE_SIZE" --start-barrier-delay "$START_BARRIER_DELAY" --ignore-response)
         if (( SAMPLE_LOG )); then producer_command+=(--sample-log); fi
         producer_command+=(--tag-record --scrapable --verbose)
