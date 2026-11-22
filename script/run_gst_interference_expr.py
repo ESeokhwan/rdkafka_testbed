@@ -62,7 +62,7 @@ def client_counts(value):
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description=__doc__, epilog="B always uses one client and one ordinary partition. No warmup or B metrics collector is required.")
+    p = argparse.ArgumentParser(description=__doc__, epilog="B always uses one client and one ordinary partition.")
     p.add_argument("--broker", default="166.104.110.13:9092")
     p.add_argument("--partitions", type=positive_int, default=16, help="A normal/GST partition count")
     p.add_argument("--a-clients", type=client_counts, default="160", help="increasing A client counts, e.g. 16,32,64,128,160")
@@ -70,6 +70,12 @@ def parse_args():
     p.add_argument("--b-interval", type=seconds, default=10, help="milliseconds per B client")
     p.add_argument("--b-messages-per-client", type=positive_int, default=6000, help="B attempts; default nominal production time is 60 seconds")
     p.add_argument("--message-size", type=positive_int, default=1000)
+    p.add_argument("--warmup-records-per-partition", type=int, default=0,
+                   help="untagged records per active partition of A and B before every case (0 disables)")
+    p.add_argument("--warmup-interval-ms", type=positive_int, default=1,
+                   help="interval between warmup records on each partition")
+    p.add_argument("--warmup-timeout", type=positive_int, default=30, help="warmup deadline per topic in seconds")
+    p.add_argument("--warmup-producer", type=Path, default=ROOT / "bin/gst_fetch_expr_warmup")
     p.add_argument("--repetitions", type=positive_int, default=3)
     p.add_argument("--cases", default=",".join(CASES))
     p.add_argument("--a-single-topic", default="impact_a_single")
@@ -106,6 +112,8 @@ def parse_args():
         p.error("intervals/timeouts must be positive and < 1e9")
     if a.csv_stable > a.csv_wait or a.replication_factor > 32767:
         p.error("invalid CSV timing or replication factor")
+    if not 0 <= a.warmup_records_per_partition <= 2147483647 or a.warmup_timeout > 2147483:
+        p.error("warmup record count or timeout exceeds the warmup producer's supported range")
     if not 0 <= a.start_barrier_delay <= 2147483647 or not 0 <= a.drain_wait <= 2147483647:
         p.error("startup/drain waits must be in 0..2147483647")
     a.a_normal_topic = a.a_normal_topic or "impact_a_normal_p{}".format(a.partitions)
@@ -117,7 +125,7 @@ def parse_args():
         glob = getattr(a, name)
         if glob is not None and (not glob or Path(glob).is_absolute() or ".." in Path(glob).parts):
             p.error("log globs must stay inside broker-log-dir")
-    for name in ("producer", "runner", "kafka_bin", "broker_log_dir", "output_root"):
+    for name in ("producer", "warmup_producer", "runner", "kafka_bin", "broker_log_dir", "output_root"):
         setattr(a, name, getattr(a, name).resolve())
     if a.output_root == a.broker_log_dir or a.output_root in a.broker_log_dir.parents or a.broker_log_dir in a.output_root.parents:
         p.error("broker-log-dir and output-root must be separate directory trees")
@@ -154,6 +162,19 @@ class Experiment:
     def a_partitions(self, case):
         return 1 if case == "single" else self.args.partitions
 
+    def warmup_commands(self, case, clients):
+        a = self.args
+        if not a.warmup_records_per_partition:
+            return
+        topics = []
+        if case != "baseline":
+            topics.append(("warmup_a", self.a_topic(case), min(clients, self.a_partitions(case))))
+        topics.append(("warmup_b", a.b_topic, 1))
+        for label, topic, partitions in topics:
+            yield label, [str(a.warmup_producer), a.broker, topic, "produce", str(partitions),
+                          str(a.warmup_records_per_partition), str(a.warmup_timeout * 1000),
+                          str(a.message_size), str(a.warmup_interval_ms)]
+
     def a_command(self, case, prefix, clients):
         a = self.args
         producer_partitions = min(clients, self.a_partitions(case))
@@ -174,7 +195,7 @@ class Experiment:
                    "--output-root", str(directory / "runner"), "--record-prefix", prefix, "--no-sample-log",
                    "--start-barrier-delay", str(a.start_barrier_delay), "--drain-wait", str(a.drain_wait),
                    "--cooldown", "0", "--run-hook", str(Path(__file__).resolve())]
-        if a.create_topics:
+        if a.create_topics and not a.warmup_records_per_partition:
             command.append("--create-topics")
         return command
 
@@ -221,25 +242,27 @@ class Experiment:
         if code:
             raise RunError("{} exited {}".format(label, code))
 
-    def prepare_a(self, case, directory):
-        a, topic, partitions = self.args, self.a_topic(case), self.a_partitions(case)
+    def prepare_topic(self, directory, side, topic, partitions, mode):
+        a = self.args
+        self.pending_topics[topic] = (mode, partitions)
+        label = "topic_" + side
         base = [str(a.kafka_bin / "kafka-topics.sh"), "--bootstrap-server", a.broker, "--topic", topic]
         if a.create_topics:
             command = base + ["--create", "--if-not-exists", "--partitions", str(partitions),
                               "--replication-factor", str(a.replication_factor), "--config", "cleanup.policy=delete"]
-            if case == "gst":
+            if mode == "gst":
                 command += ["--config", "global.sequence.enabled=true"]
-            self.command(command, directory, "topic_a_create")
-        self.command(base + ["--describe"], directory, "topic_a_describe")
-        lines = (directory / "topic_a_describe.log").read_text().splitlines()
+            self.command(command, directory, label + "_create")
+        self.command(base + ["--describe"], directory, label + "_describe")
+        lines = (directory / (label + "_describe.log")).read_text().splitlines()
         line = next((line for line in lines if line.split()[:2] == ["Topic:", topic] and "PartitionCount:" in line), "")
         count = re.search(r"\bPartitionCount:\s*(\d+)", line)
         rf = re.search(r"\bReplicationFactor:\s*(\d+)", line)
         configs = line.split("Configs:", 1)[-1].strip().split(",")
         if not count or int(count.group(1)) != partitions or not rf or int(rf.group(1)) != a.replication_factor:
-            raise RunError("A topic partition/replication mismatch")
-        if ("global.sequence.enabled=true" in configs) != (case == "gst"):
-            raise RunError("A topic GST setting mismatch")
+            raise RunError(side.upper() + " topic partition/replication mismatch")
+        if ("global.sequence.enabled=true" in configs) != (mode == "gst"):
+            raise RunError(side.upper() + " topic GST setting mismatch")
 
     def cleanup_commands(self, directory, topics=None):
         a = self.args
@@ -344,8 +367,13 @@ class Experiment:
         print("=== {}: A={} B={} ===".format(run_id, self.a_topic(case) or "off", a.b_topic), flush=True)
         try:
             if case != "baseline":
-                self.pending_topics[self.a_topic(case)] = ("gst" if case == "gst" else "normal", self.a_partitions(case))
-                self.prepare_a(case, directory)
+                self.prepare_topic(directory, "a", self.a_topic(case), self.a_partitions(case),
+                                   "gst" if case == "gst" else "normal")
+            if a.warmup_records_per_partition:
+                self.prepare_topic(directory, "b", a.b_topic, 1, "single")
+            for label, command in self.warmup_commands(case, clients):
+                self.command(command, directory, label, timeout=a.warmup_timeout + 5)
+            if case != "baseline":
                 command = self.a_command(case, prefix, clients)
                 self.event(directory, "a_start", command=command)
                 # A remains untagged; its client log output is discarded.
@@ -463,7 +491,7 @@ class Experiment:
     def run(self):
         a = self.args
         if a.dry_run:
-            print("B: one tagged client/partition; A: untagged; no warmup; clean topics after all cases/repetitions at each A client count")
+            print("B: one tagged client/partition; A: untagged; clean topics after all cases/repetitions at each A client count")
             topics = {a.b_topic: ("single", 1)}
             topics.update({self.a_topic(case): ("gst" if case == "gst" else "normal", self.a_partitions(case))
                            for case in a.cases if case != "baseline"})
@@ -471,13 +499,18 @@ class Experiment:
                 print("\nA clients={}: repeat cases {} x{}, then cleanup".format(clients, a.cases, a.repetitions))
                 for case in a.cases:
                     print("CASE " + case)
+                    for label, command in self.warmup_commands(case, clients):
+                        print(label + ": " + " ".join(shlex.quote(arg) for arg in command))
                     if case != "baseline":
                         print("A: " + " ".join(shlex.quote(arg) for arg in self.a_command(case, "dry_run", clients)))
                     print("B runner: " + " ".join(shlex.quote(arg) for arg in self.b_command(a.output_root / "dry-run", "probe_B_dry_run")))
                 for command, _ in self.cleanup_commands(a.output_root / "dry-run-cleanup", topics):
                     print("Cleanup after all repetitions: " + " ".join(shlex.quote(arg) for arg in command))
             return 0
-        for executable in (a.producer, a.runner, a.kafka_bin / "kafka-topics.sh", a.kafka_bin / "kafka-broker-extension.sh", Path(__file__).resolve()):
+        executables = [a.producer, a.runner, a.kafka_bin / "kafka-topics.sh", a.kafka_bin / "kafka-broker-extension.sh", Path(__file__).resolve()]
+        if a.warmup_records_per_partition:
+            executables.append(a.warmup_producer)
+        for executable in executables:
             if not executable.is_file() or not os.access(str(executable), os.X_OK):
                 raise RunError("executable not found: {}".format(executable))
         if not a.broker_log_dir.is_dir():
@@ -485,7 +518,9 @@ class Experiment:
         a.output_root.mkdir(parents=True, exist_ok=True)
         self.output = Path(tempfile.mkdtemp(prefix=datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ."), dir=str(a.output_root)))
         config = {key: str(value) if isinstance(value, Path) else value for key, value in vars(a).items()}
-        config.update(generator_host=socket.gethostname(), a_tagged=False, b_tagged=True, b_clients=1, warmup_s=0, acks=0)
+        config.update(generator_host=socket.gethostname(), a_tagged=False, b_tagged=True, b_clients=1, acks=0)
+        if not a.warmup_records_per_partition:
+            config["warmup_s"] = 0
         (self.output / "config.json").write_text(json.dumps(config, indent=2) + "\n")
         for name in (Path(__file__).name, "gst_interference_logs.py"):
             (self.output / name).write_bytes(Path(__file__).with_name(name).read_bytes())
