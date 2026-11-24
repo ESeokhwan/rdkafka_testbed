@@ -169,7 +169,7 @@ void warm_partition(rd_kafka_t *producer, const char *topic, int partition, int 
 }
 
 int main(int argc, char **argv) try {
-    if (argc < 7 || argc > 9) throw std::runtime_error("usage: gst_fetch_expr_warmup BROKER TOPIC gst|single|produce PARTITIONS RECORDS_PER_PARTITION TIMEOUT_MS [MESSAGE_SIZE [INTERVAL_MS]]");
+    if (argc < 7 || argc > 9) throw std::runtime_error("usage: gst_fetch_expr_warmup BROKER TOPIC gst|single|normal|produce PARTITIONS RECORDS_PER_PARTITION TIMEOUT_MS [MESSAGE_SIZE [INTERVAL_MS]]");
     const std::string_view mode(argv[3]);
     const int partitions = std::stoi(argv[4]);
     const int records = std::stoi(argv[5]);
@@ -178,7 +178,7 @@ int main(int argc, char **argv) try {
     const auto interval = std::chrono::milliseconds(argc == 9 ? std::stoi(argv[8]) : 1);
     if (interval.count() <= 0) throw std::runtime_error("warmup interval must be positive");
     if (message_size <= 0 || partitions <= 0 || records <= 0 || timeout <= 0 ||
-        (mode != "produce" && mode != "gst" && (mode != "single" || partitions != 1)))
+        (mode != "produce" && mode != "gst" && mode != "normal" && (mode != "single" || partitions != 1)))
         throw std::runtime_error("invalid warmup mode, partition count, record count or timeout");
 
     const auto deadline = Clock::now() + std::chrono::milliseconds(timeout);

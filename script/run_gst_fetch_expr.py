@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure GST or ordinary single-partition Fetch throughput and E2E latency."""
+"""Measure GST or ordinary Kafka Fetch throughput and E2E latency."""
 
 import argparse
 import csv
@@ -100,8 +100,8 @@ def client_counts(value):
 
 def topic_modes(value):
     values = [part.strip() for part in value.split(",")]
-    if any(mode not in ("gst", "single") for mode in values) or len(set(values)) != len(values):
-        raise argparse.ArgumentTypeError("topic modes must be distinct names from gst,single")
+    if any(mode not in ("gst", "single", "normal") for mode in values) or len(set(values)) != len(values):
+        raise argparse.ArgumentTypeError("topic modes must be distinct names from gst,single,normal")
     return values
 
 
@@ -111,15 +111,16 @@ def parse_args():
     p.add_argument("--mode", choices=("live", "backlog"), default="live",
                    help="live: produce/fetch together; backlog: produce first, then measure drain")
     p.add_argument("--topic-modes", "--topic-mode", type=topic_modes, default="gst",
-                   help="ordered topic modes, e.g. gst,single; single always uses partition 0")
-    p.add_argument("--partitions", type=positive, default=16, help="GST source partitions; single mode always uses 1")
+                   help="ordered topic modes, gst,normal,single")
+    p.add_argument("--partitions", type=positive, default=16, help="GST/normal source partitions; single mode always uses 1")
+    p.add_argument("--normal-consumers", type=positive, help="normal Fetch consumer count (defaults to partitions)")
     p.add_argument("--clients", type=client_counts, default="16",
                    help="increasing producer client counts, e.g. 16,32,64,128")
     p.add_argument("--interval", type=seconds, default=3, help="producer interval in ms")
     p.add_argument("--messages-per-client", type=positive, default=20000)
     p.add_argument("--message-size", type=positive, default=1000)
     p.add_argument("--batch-sizes", "--batch-size", type=batch_sizes, default="1000",
-                   help="GST position range / single consumer delivery cap, e.g. 100,500,1000")
+                   help="GST position range / per-partition consumer delivery cap, e.g. 100,500,1000")
     p.add_argument("--max-batches", type=positive, default=1000, help="API98 production-batch limit")
     p.add_argument("--max-bytes", type=positive, default=1048576, help="API98 soft encoded-byte limit")
     p.add_argument("--isolation-level", type=int, choices=(0, 1), default=0)
@@ -169,8 +170,10 @@ def parse_args():
         p.error("total producer attempt count exceeds the existing app limit")
     if a.max_batches > 1000 or a.max_bytes > 16646144 or a.replication_factor > 32767:
         p.error("invalid API98 batch/byte limit or replication factor")
-    if "single" in a.topic_modes and a.max_bytes < 1000:
-        p.error("single mode needs max-bytes >= 1000")
+    if any(mode != "gst" for mode in a.topic_modes) and a.max_bytes < 1000:
+        p.error("ordinary Fetch needs max-bytes >= 1000")
+    if a.normal_consumers is not None and ("normal" not in a.topic_modes or a.normal_consumers > a.partitions):
+        p.error("--normal-consumers requires normal mode and must not exceed --partitions")
     if a.prefetch == "on" and "gst" not in a.topic_modes:
         p.error("prefetch requires GST mode")
     if not a.broker or not re.fullmatch(r"[A-Za-z0-9._-]{1,120}", a.topic_prefix) or a.topic_prefix in (".", ".."):
@@ -197,7 +200,14 @@ class Experiment:
         self.cleanups = []
 
     def partitions_for(self, topic_mode):
-        return self.args.partitions if topic_mode == "gst" else 1
+        return 1 if topic_mode == "single" else self.args.partitions
+
+    def consumers_for(self, topic_mode):
+        return (self.args.normal_consumers or self.args.partitions) if topic_mode == "normal" else 1
+
+    def warmup_start_offset(self, clients, topic_mode):
+        records = self.args.warmup_records_per_partition
+        return min(clients, self.args.partitions) * records if topic_mode == "gst" else records
 
     def stop(self, process, grace=None):
         if process is None:
@@ -258,12 +268,22 @@ class Experiment:
         if a.prepare_producers == "on":
             producer.extend(("--prepare-producers", "on", "--prepare-timeout-ms", str(a.prepare_timeout_ms)))
         consumer = [str(a.consumer), "--broker", a.broker, "--topic", topic, "--topic-mode", topic_mode, "--start-offset", str(start_offset),
-                    "--end-offset", str(start_offset + clients * a.messages_per_client), "--batch-size", str(size),
+                    "--batch-size", str(size),
                     "--max-batches", str(a.max_batches), "--max-bytes", str(a.max_bytes),
                     "--isolation-level", str(a.isolation_level), "--fetch-timeout-ms", str(a.fetch_timeout_ms),
                     "--poll-interval-ms", str(a.poll_interval_ms), "--metrics-interval-ms", str(a.metrics_interval_ms),
                     "--duration", str(a.command_timeout + self.producer_process_timeout() + a.catchup_timeout + 10),
                     "--output-dir", str(directory / "consumer"), "--ready-file", str(directory / "consumer_ready.json")]
+        if topic_mode == "normal":
+            # Producer i writes all its records to partition i % producer_partitions.
+            partitions = self.partitions_for(topic_mode)
+            base, extra = divmod(clients, partitions)
+            counts = [(base + (i < extra)) * a.messages_per_client for i in range(partitions)]
+            consumer.extend(("--partition-records", ",".join(map(str, counts))))
+            if a.normal_consumers is not None:
+                consumer.extend(("--normal-consumers", str(a.normal_consumers)))
+        else:
+            consumer.extend(("--end-offset", str(start_offset + clients * a.messages_per_client)))
         if a.no_latency_log:
             consumer.append("--no-latency-log")
         if topic_mode == "gst" and a.prefetch == "on":
@@ -272,7 +292,7 @@ class Experiment:
 
     def cleanup(self, directory, topic, topic_mode):
         a = self.args
-        topic_option = "--gst-topic" if topic_mode == "gst" else "--single-topic"
+        topic_option = "--" + topic_mode + "-topic"
         command = ["/bin/bash", str(a.cleanup_runner), "--cleanup-only", "--broker", a.broker,
                    "--partitions", str(self.partitions_for(topic_mode)), "--modes", topic_mode, topic_option, topic,
                    "--replication-factor", str(a.replication_factor), "--kafka-bin", str(a.kafka_bin),
@@ -336,6 +356,7 @@ class Experiment:
         directory.mkdir()
         topic = "{}_p{}_{}_{}".format(a.topic_prefix, partitions, run_id, self.output.name.split(".")[-1])
         result = dict(run_id=run_id, topic_mode=topic_mode, batch_size=size, repetition=repetition, topic=topic, partitions=partitions,
+                      consumer_count=self.consumers_for(topic_mode),
                       producer_clients=clients, producer_interval_ms=a.interval,
                       producer_attempts=clients * a.messages_per_client, message_size=a.message_size,
                       max_batches=a.max_batches if topic_mode == "gst" else None,
@@ -357,10 +378,9 @@ class Experiment:
                 if not lines or not lines[-1].isdigit():
                     raise RunError("missing warmup boundary; see warmup.log")
                 start_offset = int(lines[-1])
-                expected = min(clients, partitions) * a.warmup_records_per_partition
-                if start_offset != expected:
+                if start_offset != self.warmup_start_offset(clients, topic_mode):
                     raise RunError("unexpected warmup boundary; see warmup.log")
-                result["warmup_records"] = start_offset
+                result["warmup_records"] = min(clients, partitions) * a.warmup_records_per_partition
                 result["measurement_start_offset"] = start_offset
             producer, consumer = self.commands(directory, topic, size, clients, topic_mode, start_offset)
             (directory / "producer_command.json").write_text(json.dumps(producer, indent=2) + "\n")
@@ -464,6 +484,7 @@ class Experiment:
                     rows = [row for row in self.results if row["producer_clients"] == clients
                             and row["topic_mode"] == topic_mode and row["batch_size"] == size]
                     group = dict(topic_mode=topic_mode, partitions=self.partitions_for(topic_mode),
+                                 consumer_count=self.consumers_for(topic_mode),
                                  producer_clients=clients, batch_size=size,
                                  successful_runs=sum(row["status"] == "SUCCESS" for row in rows),
                                  failed_runs=sum(row["status"] != "SUCCESS" for row in rows))
@@ -486,7 +507,7 @@ class Experiment:
                     partitions = self.partitions_for(topic_mode)
                     for size in a.batch_sizes:
                         topic = "{}_{}_p{}_clients_{}_batch_{}_repeat_1_dry".format(a.topic_prefix, topic_mode, partitions, clients, size)
-                        planned_start = min(clients, partitions) * a.warmup_records_per_partition
+                        planned_start = self.warmup_start_offset(clients, topic_mode)
                         producer, consumer = self.commands(a.output_root / "dry-run", topic, size, clients, topic_mode, planned_start)
                         stages = "consumer ready -> producer -> catch up" if a.mode == "live" else "producer -> consumer drain"
                         if planned_start:
@@ -507,11 +528,15 @@ class Experiment:
         for path in paths:
             if not path.is_file() or not os.access(str(path), os.X_OK):
                 raise RunError("executable missing; build the local GST-enabled targets: " + str(path))
-        fd_limit = configure_fd_limit(max(a.clients), a.broker)
+        fd_clients = max(a.clients) + (self.consumers_for("normal") - 1 if "normal" in a.topic_modes else 0)
+        fd_limit = configure_fd_limit(fd_clients, a.broker)
         a.output_root.mkdir(parents=True, exist_ok=True)
         self.output = Path(tempfile.mkdtemp(prefix=datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ."), dir=str(a.output_root)))
         config = {key: str(value) if isinstance(value, Path) else value for key, value in vars(a).items()}
-        config.update(open_files=fd_limit, generator_host=socket.gethostname(), measurement=a.mode + " " + ",".join(a.topic_modes) + " fetch", producer_acks=0, consumer_count=1,
+        consumer_counts = {mode: self.consumers_for(mode) for mode in a.topic_modes}
+        counts = set(consumer_counts.values())
+        config.update(open_files=fd_limit, generator_host=socket.gethostname(), measurement=a.mode + " " + ",".join(a.topic_modes) + " fetch", producer_acks=0,
+                      consumer_counts=consumer_counts, consumer_count=counts.pop() if len(counts) == 1 else None,
                       topic_partitions={mode: self.partitions_for(mode) for mode in a.topic_modes},
                       message_generator="FastJsonBasedLatencyMonitoringMessageGenerator", throughput_clock="consumer steady elapsed time")
         (self.output / "config.json").write_text(json.dumps(config, indent=2) + "\n")
