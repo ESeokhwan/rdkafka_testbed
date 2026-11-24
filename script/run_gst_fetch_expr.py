@@ -21,6 +21,7 @@ import time
 
 
 ROOT = Path(__file__).resolve().parent.parent
+PARTITION_FETCH_MODES = ("normal", "gst-normal")
 
 
 class RunError(Exception):
@@ -100,8 +101,8 @@ def client_counts(value):
 
 def topic_modes(value):
     values = [part.strip() for part in value.split(",")]
-    if any(mode not in ("gst", "single", "normal") for mode in values) or len(set(values)) != len(values):
-        raise argparse.ArgumentTypeError("topic modes must be distinct names from gst,single,normal")
+    if any(mode not in ("gst", "single", *PARTITION_FETCH_MODES) for mode in values) or len(set(values)) != len(values):
+        raise argparse.ArgumentTypeError("topic modes must be distinct names from gst,single,normal,gst-normal")
     return values
 
 
@@ -111,9 +112,10 @@ def parse_args():
     p.add_argument("--mode", choices=("live", "backlog"), default="live",
                    help="live: produce/fetch together; backlog: produce first, then measure drain")
     p.add_argument("--topic-modes", "--topic-mode", type=topic_modes, default="gst",
-                   help="ordered topic modes, gst,normal,single")
+                   help="ordered topic modes: gst (Global Sequence Fetch), gst-normal (Kafka Fetch on GST), normal, single")
     p.add_argument("--partitions", type=positive, default=16, help="GST/normal source partitions; single mode always uses 1")
-    p.add_argument("--normal-consumers", type=positive, help="normal Fetch consumer count (defaults to partitions)")
+    p.add_argument("--normal-consumers", "--normal-conumsers", type=positive,
+                   help="consumer count for normal and gst-normal (defaults to partitions)")
     p.add_argument("--clients", type=client_counts, default="16",
                    help="increasing producer client counts, e.g. 16,32,64,128")
     p.add_argument("--interval", type=seconds, default=3, help="producer interval in ms")
@@ -172,8 +174,9 @@ def parse_args():
         p.error("invalid API98 batch/byte limit or replication factor")
     if any(mode != "gst" for mode in a.topic_modes) and a.max_bytes < 1000:
         p.error("ordinary Fetch needs max-bytes >= 1000")
-    if a.normal_consumers is not None and ("normal" not in a.topic_modes or a.normal_consumers > a.partitions):
-        p.error("--normal-consumers requires normal mode and must not exceed --partitions")
+    if a.normal_consumers is not None and (
+            not any(mode in PARTITION_FETCH_MODES for mode in a.topic_modes) or a.normal_consumers > a.partitions):
+        p.error("--normal-consumers requires normal or gst-normal and must not exceed --partitions")
     if a.prefetch == "on" and "gst" not in a.topic_modes:
         p.error("prefetch requires GST mode")
     if not a.broker or not re.fullmatch(r"[A-Za-z0-9._-]{1,120}", a.topic_prefix) or a.topic_prefix in (".", ".."):
@@ -203,7 +206,11 @@ class Experiment:
         return 1 if topic_mode == "single" else self.args.partitions
 
     def consumers_for(self, topic_mode):
-        return (self.args.normal_consumers or self.args.partitions) if topic_mode == "normal" else 1
+        return (self.args.normal_consumers or self.args.partitions) if topic_mode in PARTITION_FETCH_MODES else 1
+
+    @staticmethod
+    def gst_enabled(topic_mode):
+        return topic_mode in ("gst", "gst-normal")
 
     def warmup_start_offset(self, clients, topic_mode):
         records = self.args.warmup_records_per_partition
@@ -253,7 +260,8 @@ class Experiment:
     def warmup_command(self, topic, clients, topic_mode):
         a = self.args
         partitions = min(clients, self.partitions_for(topic_mode))
-        return [str(ROOT / "bin/gst_fetch_expr_warmup"), a.broker, topic, topic_mode,
+        warmup_mode = "normal" if topic_mode in PARTITION_FETCH_MODES else topic_mode
+        return [str(ROOT / "bin/gst_fetch_expr_warmup"), a.broker, topic, warmup_mode,
                 str(partitions), str(a.warmup_records_per_partition), str(a.warmup_timeout * 1000),
                 str(a.message_size), str(a.warmup_interval_ms)]
 
@@ -267,14 +275,15 @@ class Experiment:
                     "--start-barrier-delay", str(a.start_barrier_delay), "--ignore-response", "--sample-log"]
         if a.prepare_producers == "on":
             producer.extend(("--prepare-producers", "on", "--prepare-timeout-ms", str(a.prepare_timeout_ms)))
-        consumer = [str(a.consumer), "--broker", a.broker, "--topic", topic, "--topic-mode", topic_mode, "--start-offset", str(start_offset),
+        consumer_mode = "normal" if topic_mode in PARTITION_FETCH_MODES else topic_mode
+        consumer = [str(a.consumer), "--broker", a.broker, "--topic", topic, "--topic-mode", consumer_mode, "--start-offset", str(start_offset),
                     "--batch-size", str(size),
                     "--max-batches", str(a.max_batches), "--max-bytes", str(a.max_bytes),
                     "--isolation-level", str(a.isolation_level), "--fetch-timeout-ms", str(a.fetch_timeout_ms),
                     "--poll-interval-ms", str(a.poll_interval_ms), "--metrics-interval-ms", str(a.metrics_interval_ms),
                     "--duration", str(a.command_timeout + self.producer_process_timeout() + a.catchup_timeout + 10),
                     "--output-dir", str(directory / "consumer"), "--ready-file", str(directory / "consumer_ready.json")]
-        if topic_mode == "normal":
+        if consumer_mode == "normal":
             # Producer i writes all its records to partition i % producer_partitions.
             partitions = self.partitions_for(topic_mode)
             base, extra = divmod(clients, partitions)
@@ -292,9 +301,10 @@ class Experiment:
 
     def cleanup(self, directory, topic, topic_mode):
         a = self.args
-        topic_option = "--" + topic_mode + "-topic"
+        cleanup_mode = "gst" if self.gst_enabled(topic_mode) else topic_mode
+        topic_option = "--" + cleanup_mode + "-topic"
         command = ["/bin/bash", str(a.cleanup_runner), "--cleanup-only", "--broker", a.broker,
-                   "--partitions", str(self.partitions_for(topic_mode)), "--modes", topic_mode, topic_option, topic,
+                   "--partitions", str(self.partitions_for(topic_mode)), "--modes", cleanup_mode, topic_option, topic,
                    "--replication-factor", str(a.replication_factor), "--kafka-bin", str(a.kafka_bin),
                    "--topic-delete-timeout", str(a.topic_delete_timeout), "--output-root", str(directory / "cleanup")]
         try:
@@ -367,7 +377,7 @@ class Experiment:
         try:
             create = [str(a.kafka_bin / "kafka-topics.sh"), "--bootstrap-server", a.broker, "--create", "--topic", topic,
                       "--partitions", str(partitions), "--replication-factor", str(a.replication_factor),
-                      "--config", "cleanup.policy=delete", "--config", "global.sequence.enabled=" + str(topic_mode == "gst").lower()]
+                      "--config", "cleanup.policy=delete", "--config", "global.sequence.enabled=" + str(self.gst_enabled(topic_mode)).lower()]
             self.command(create, directory, "create")
             self.pending_topics[topic] = (directory, result)
             result["cleanup_status"] = "PENDING"
@@ -528,7 +538,7 @@ class Experiment:
         for path in paths:
             if not path.is_file() or not os.access(str(path), os.X_OK):
                 raise RunError("executable missing; build the local GST-enabled targets: " + str(path))
-        fd_clients = max(a.clients) + (self.consumers_for("normal") - 1 if "normal" in a.topic_modes else 0)
+        fd_clients = max(a.clients) + max(self.consumers_for(mode) for mode in a.topic_modes) - 1
         fd_limit = configure_fd_limit(fd_clients, a.broker)
         a.output_root.mkdir(parents=True, exist_ok=True)
         self.output = Path(tempfile.mkdtemp(prefix=datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ."), dir=str(a.output_root)))
