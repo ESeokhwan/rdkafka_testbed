@@ -111,6 +111,9 @@ def parse_args():
     p.add_argument("--broker", default="166.104.110.13:9092")
     p.add_argument("--mode", choices=("live", "backlog"), default="live",
                    help="live: produce/fetch together; backlog: produce first, then measure drain")
+    p.add_argument("--backlog", dest="mode", action="store_const", const="backlog", help="alias for --mode backlog")
+    p.add_argument("--backlog-wait", type=seconds, default=60,
+                   help="seconds to wait after all backlog producers finish (default: 60)")
     p.add_argument("--topic-modes", "--topic-mode", type=topic_modes, default="gst",
                    help="ordered topic modes: gst (Global Sequence Fetch), gst-normal (Kafka Fetch on GST), normal, single")
     p.add_argument("--partitions", type=positive, default=16, help="GST/normal source partitions; single mode always uses 1")
@@ -148,7 +151,7 @@ def parse_args():
     p.add_argument("--stop-grace", type=seconds, default=10)
     p.add_argument("--topic-delete-timeout", type=seconds, default=120)
     p.add_argument("--cleanup-after", choices=("clients", "run"), default="clients",
-                   help="delete topics after all topic modes/batches/repetitions at each client count (default), or each run")
+                   help="live mode topic deletion scope (default: clients)")
     p.add_argument("--cooldown", type=seconds, default=60, help="wait after topic deletion")
     p.add_argument("--replication-factor", type=positive, default=1)
     p.add_argument("--topic-prefix", default="gst_fetch")
@@ -357,61 +360,35 @@ class Experiment:
         if result["status"] != "SUCCESS":
             raise RunError("topic cleanup failed; no further production will start: " + ", ".join(result["failed_topics"]))
 
-    def run_case(self, clients, topic_mode, size, repetition):
+    def prepare_topic(self, directory, topic, clients, topic_mode, result):
         a = self.args
         partitions = self.partitions_for(topic_mode)
-        case_id = "batch_{}_repeat_{}".format(size, repetition)
-        run_id = "clients_{}_{}_{}".format(clients, topic_mode, case_id)
-        directory = self.output / "clients_{}".format(clients) / topic_mode / case_id
-        directory.mkdir()
-        topic = "{}_p{}_{}_{}".format(a.topic_prefix, partitions, run_id, self.output.name.split(".")[-1])
-        result = dict(run_id=run_id, topic_mode=topic_mode, batch_size=size, repetition=repetition, topic=topic, partitions=partitions,
-                      consumer_count=self.consumers_for(topic_mode),
-                      producer_clients=clients, producer_interval_ms=a.interval,
-                      producer_attempts=clients * a.messages_per_client, message_size=a.message_size,
-                      max_batches=a.max_batches if topic_mode == "gst" else None,
-                      max_bytes=a.max_bytes, status="SUCCESS", reason="",
-                      producer_exit=None, consumer_exit=None, cleanup_status="NOT_CREATED", started_at=now(), log_dir=str(directory))
-        streams = []
-        print("=== {}: {} {} Fetch, P={}, topic={} ===".format(run_id, a.mode, topic_mode, partitions, topic), flush=True)
-        try:
-            create = [str(a.kafka_bin / "kafka-topics.sh"), "--bootstrap-server", a.broker, "--create", "--topic", topic,
-                      "--partitions", str(partitions), "--replication-factor", str(a.replication_factor),
-                      "--config", "cleanup.policy=delete", "--config", "global.sequence.enabled=" + str(self.gst_enabled(topic_mode)).lower()]
-            self.command(create, directory, "create")
+        create = [str(a.kafka_bin / "kafka-topics.sh"), "--bootstrap-server", a.broker, "--create", "--topic", topic,
+                  "--partitions", str(partitions), "--replication-factor", str(a.replication_factor),
+                  "--config", "cleanup.policy=delete", "--config", "global.sequence.enabled=" + str(self.gst_enabled(topic_mode)).lower()]
+        self.command(create, directory, "create")
+        if a.mode == "live":
             self.pending_topics[topic] = (directory, result)
             result["cleanup_status"] = "PENDING"
-            start_offset = 0
-            if a.warmup_records_per_partition:
-                self.command(self.warmup_command(topic, clients, topic_mode), directory, "warmup", a.warmup_timeout + 5)
-                lines = (directory / "warmup.log").read_text().splitlines()
-                if not lines or not lines[-1].isdigit():
-                    raise RunError("missing warmup boundary; see warmup.log")
-                start_offset = int(lines[-1])
-                if start_offset != self.warmup_start_offset(clients, topic_mode):
-                    raise RunError("unexpected warmup boundary; see warmup.log")
-                result["warmup_records"] = min(clients, partitions) * a.warmup_records_per_partition
-                result["measurement_start_offset"] = start_offset
-            producer, consumer = self.commands(directory, topic, size, clients, topic_mode, start_offset)
-            (directory / "producer_command.json").write_text(json.dumps(producer, indent=2) + "\n")
-            (directory / "consumer_command.json").write_text(json.dumps(consumer, indent=2) + "\n")
-            def start_consumer():
-                consumer_log = (directory / "consumer.log").open("w")
-                streams.append(consumer_log)
-                self.consumer = subprocess.Popen(consumer, stdout=consumer_log, stderr=subprocess.STDOUT, start_new_session=True)
-                deadline = time.monotonic() + a.command_timeout
-                while not (directory / "consumer_ready.json").exists():
-                    if self.consumer.poll() is not None:
-                        raise RunError("consumer exited during initialization; see consumer.log")
-                    if time.monotonic() >= deadline:
-                        raise RunError("consumer initialization timed out")
-                    time.sleep(.02)
+        else:
+            result["cleanup_status"] = "RETAINED"
+        start_offset = 0
+        if a.warmup_records_per_partition:
+            self.command(self.warmup_command(topic, clients, topic_mode), directory, "warmup", a.warmup_timeout + 5)
+            lines = (directory / "warmup.log").read_text().splitlines()
+            if not lines or not lines[-1].isdigit():
+                raise RunError("missing warmup boundary; see warmup.log")
+            start_offset = int(lines[-1])
+            if start_offset != self.warmup_start_offset(clients, topic_mode):
+                raise RunError("unexpected warmup boundary; see warmup.log")
+            result["warmup_records"] = min(clients, partitions) * a.warmup_records_per_partition
+            result["measurement_start_offset"] = start_offset
+        return start_offset
 
-            if a.mode == "live":
-                start_consumer()
-            producer_log = (directory / "producer.log").open("w")
-            streams.append(producer_log)
-            self.producer = subprocess.Popen(producer, stdout=producer_log, stderr=subprocess.STDOUT, start_new_session=True)
+    def produce(self, producer, directory):
+        (directory / "producer_command.json").write_text(json.dumps(producer, indent=2) + "\n")
+        with (directory / "producer.log").open("w") as output:
+            self.producer = subprocess.Popen(producer, stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
             deadline = time.monotonic() + self.producer_process_timeout()
             while self.producer.poll() is None:
                 if self.consumer is not None and self.consumer.poll() not in (None, 0):
@@ -421,17 +398,109 @@ class Experiment:
                 time.sleep(.05)
             if self.producer.returncode:
                 raise RunError("producer exited {}; see producer.log".format(self.producer.returncode))
-            if a.mode == "backlog":
-                start_consumer()
+        with (directory / "producer.log").open("rb") as log:
+            if any(b"Too many open files" in line for line in log):
+                raise RunError("producer exhausted file descriptors; see producer.log")
+
+    def backlog_topic(self, clients, topic_mode, suffix):
+        return "{}_p{}_clients_{}_{}_backlog_{}".format(
+            self.args.topic_prefix, self.partitions_for(topic_mode), clients, topic_mode, suffix)
+
+    def prepare_backlog(self, clients, topic_mode):
+        a = self.args
+        directory = self.output / f"clients_{clients}" / topic_mode / "backlog"
+        directory.mkdir(parents=True)
+        topic = self.backlog_topic(clients, topic_mode, self.output.name.split(".")[-1])
+        dataset = dict(topic=topic, topic_mode=topic_mode, producer_clients=clients, log_dir=str(directory),
+                       status="SUCCESS", reason="", producer_exit=None, cleanup_status="NOT_CREATED",
+                       measurement_start_offset=0, started_at=now())
+        print(f"=== Preparing backlog for clients={clients}, mode={topic_mode}, topic={topic} ===", flush=True)
+        try:
+            start = self.prepare_topic(directory, topic, clients, topic_mode, dataset)
+            dataset["measurement_start_offset"] = start
+            producer, _ = self.commands(directory, topic, a.batch_sizes[0], clients, topic_mode, start)
+            self.produce(producer, directory)
+        except (RunError, OSError, ValueError) as error:
+            dataset.update(status="FAILED", reason=str(error))
+        except Cancelled:
+            dataset.update(status="INTERRUPTED", reason="controller_interrupted")
+            raise
+        finally:
+            self.finalizing = True
+            producer = self.producer
+            self.stop_all()
+            if producer is not None:
+                dataset["producer_exit"] = producer.returncode
+            dataset["finished_at"] = now()
+            (directory / "result.json").write_text(json.dumps(dataset, indent=2) + "\n")
+            self.finalizing = False
+            if self.cancelled:
+                raise Cancelled()
+        return dataset
+
+    def run_backlog(self):
+        a = self.args
+        datasets = {(clients, mode): self.prepare_backlog(clients, mode)
+                    for clients in a.clients for mode in a.topic_modes}
+        if any(dataset["status"] == "SUCCESS" for dataset in datasets.values()):
+            print(f"All backlog preparation finished. Waiting {a.backlog_wait:g}s before measurements.", flush=True)
+            time.sleep(a.backlog_wait)
+        for (clients, mode), dataset in datasets.items():
+            for size in a.batch_sizes:
+                for repetition in range(1, a.repetitions + 1):
+                    self.run_case(clients, mode, size, repetition, dataset)
+
+    def run_case(self, clients, topic_mode, size, repetition, dataset=None):
+        a = self.args
+        partitions = self.partitions_for(topic_mode)
+        case_id = "batch_{}_repeat_{}".format(size, repetition)
+        run_id = "clients_{}_{}_{}".format(clients, topic_mode, case_id)
+        directory = self.output / "clients_{}".format(clients) / topic_mode / case_id
+        directory.mkdir()
+        topic = "{}_p{}_{}_{}".format(a.topic_prefix, partitions, run_id, self.output.name.split(".")[-1])
+        if dataset is not None:
+            topic = dataset["topic"]
+        result = dict(run_id=run_id, topic_mode=topic_mode, batch_size=size, repetition=repetition, topic=topic, partitions=partitions,
+                      consumer_count=self.consumers_for(topic_mode),
+                      producer_clients=clients, producer_interval_ms=a.interval,
+                      producer_attempts=clients * a.messages_per_client, message_size=a.message_size,
+                      max_batches=a.max_batches if topic_mode == "gst" else None,
+                      max_bytes=a.max_bytes, status="SUCCESS", reason="",
+                      producer_exit=None, consumer_exit=None, cleanup_status="NOT_CREATED", started_at=now(), log_dir=str(directory))
+        if dataset is not None:
+            result.update(producer_exit=dataset["producer_exit"], cleanup_status=dataset["cleanup_status"],
+                          backlog_dir=dataset["log_dir"], measurement_start_offset=dataset["measurement_start_offset"],
+                          warmup_records=dataset.get("warmup_records", 0))
+        streams = []
+        print("=== {}: {} {} Fetch, P={}, topic={} ===".format(run_id, a.mode, topic_mode, partitions, topic), flush=True)
+        try:
+            if dataset is None:
+                start_offset = self.prepare_topic(directory, topic, clients, topic_mode, result)
+            elif dataset["status"] == "SUCCESS":
+                start_offset = dataset["measurement_start_offset"]
+            else:
+                raise RunError("backlog preparation failed: " + dataset["reason"])
+            producer, consumer = self.commands(directory, topic, size, clients, topic_mode, start_offset)
+            (directory / "consumer_command.json").write_text(json.dumps(consumer, indent=2) + "\n")
+            consumer_log = (directory / "consumer.log").open("w")
+            streams.append(consumer_log)
+            self.consumer = subprocess.Popen(consumer, stdout=consumer_log, stderr=subprocess.STDOUT, start_new_session=True)
+            deadline = time.monotonic() + a.command_timeout
+            while not (directory / "consumer_ready.json").exists():
+                if self.consumer.poll() is not None:
+                    raise RunError("consumer exited during initialization; see consumer.log")
+                if time.monotonic() >= deadline:
+                    raise RunError("consumer initialization timed out")
+                time.sleep(.02)
+
+            if dataset is None:
+                self.produce(producer, directory)
             try:
                 self.consumer.wait(timeout=a.catchup_timeout)
             except subprocess.TimeoutExpired:
                 raise RunError("consumer did not reach the target within catchup-timeout")
             if self.consumer.returncode:
                 raise RunError("consumer exited {}; inspect its summary.json".format(self.consumer.returncode))
-            with (directory / "producer.log").open("rb") as log:
-                if any(b"Too many open files" in line for line in log):
-                    raise RunError("producer exhausted file descriptors; see producer.log")
         except (RunError, OSError, ValueError) as error:
             result.update(status="FAILED", reason=str(error))
         except Cancelled:
@@ -511,6 +580,26 @@ class Experiment:
     def run(self):
         a = self.args
         if a.dry_run:
+            if a.mode == "backlog":
+                plans = []
+                for clients in a.clients:
+                    for mode in a.topic_modes:
+                        topic = self.backlog_topic(clients, mode, "dry")
+                        directory = a.output_root / "dry-run" / f"clients_{clients}" / mode
+                        start = self.warmup_start_offset(clients, mode)
+                        plans.append((clients, mode, topic, directory, start))
+                        print(f"Create backlog topic {topic}, P={self.partitions_for(mode)}")
+                        if start:
+                            print("WARMUP: " + shlex.join(self.warmup_command(topic, clients, mode)))
+                        producer, _ = self.commands(directory / "backlog", topic, a.batch_sizes[0], clients, mode, start)
+                        print("PRODUCER: " + shlex.join(producer))
+                print(f"Wait {a.backlog_wait:g}s after all production; retain backlog topics.")
+                for clients, mode, topic, directory, start in plans:
+                    for size in a.batch_sizes:
+                        print(f"topic_mode={mode} batch_size={size} repetitions={a.repetitions}")
+                        _, consumer = self.commands(directory / f"batch_{size}_repeat_1", topic, size, clients, mode, start)
+                        print("CONSUMER: " + shlex.join(consumer))
+                return 0
             for clients in a.clients:
                 print("\nclients={}: all topic modes/batch sizes/repetitions, cleanup-after={}".format(clients, a.cleanup_after))
                 for topic_mode in a.topic_modes:
@@ -519,7 +608,7 @@ class Experiment:
                         topic = "{}_{}_p{}_clients_{}_batch_{}_repeat_1_dry".format(a.topic_prefix, topic_mode, partitions, clients, size)
                         planned_start = self.warmup_start_offset(clients, topic_mode)
                         producer, consumer = self.commands(a.output_root / "dry-run", topic, size, clients, topic_mode, planned_start)
-                        stages = "consumer ready -> producer -> catch up" if a.mode == "live" else "producer -> consumer drain"
+                        stages = "consumer ready -> producer -> catch up"
                         if planned_start:
                             stages = "warmup -> confirm committed start -> " + stages
                         print("topic_mode={} P={} batch_size={} repetitions={}: create fresh topic -> {}".format(topic_mode, partitions, size, a.repetitions, stages))
@@ -532,7 +621,9 @@ class Experiment:
                 if a.cleanup_after == "clients":
                     print("delete all topics for clients={} -> cooldown {}s -> next client count".format(clients, a.cooldown))
             return 0
-        paths = [a.producer, a.consumer, a.cleanup_runner, a.kafka_bin / "kafka-topics.sh"]
+        paths = [a.producer, a.consumer, a.kafka_bin / "kafka-topics.sh"]
+        if a.mode == "live":
+            paths.append(a.cleanup_runner)
         if a.warmup_records_per_partition:
             paths.append(ROOT / "bin/gst_fetch_expr_warmup")
         for path in paths:
@@ -552,6 +643,9 @@ class Experiment:
         (self.output / "config.json").write_text(json.dumps(config, indent=2) + "\n")
         (self.output / "script.py").write_bytes(Path(__file__).read_bytes())
         print("Results: " + str(self.output), flush=True)
+        if a.mode == "backlog":
+            self.run_backlog()
+            return 1 if any(row["status"] != "SUCCESS" for row in self.results) else 0
         for clients in a.clients:
             (self.output / "clients_{}".format(clients)).mkdir()
             try:
@@ -587,7 +681,7 @@ def main():
     try:
         return experiment.run()
     except Cancelled:
-        print("Interrupted; producer/consumer stopped and topic cleanup attempted.", file=sys.stderr)
+        print("Interrupted; stopping active processes.", file=sys.stderr)
         return 130
     except (RunError, OSError) as error:
         print(str(error), file=sys.stderr)
